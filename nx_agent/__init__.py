@@ -1,0 +1,35 @@
+"""
+NxAgent — production-grade agentic framework for orchestrating
+multi-agent workflows, tool execution, and intelligent task routing.
+"""
+
+from nx_agent.tool import tool, ToolSchema
+from nx_agent.agent import Agent
+from nx_agent.workflow import Workflow
+from nx_agent.result import WorkflowResult, StepResult
+from nx_agent.router import Router
+from nx_agent.memory import Memory
+from nx_agent.exceptions import (
+    NxAgentError,
+    ToolExecutionError,
+    AgentError,
+    WorkflowError,
+)
+
+__all__ = [
+    "Agent",
+    "Workflow",
+    "Router",
+    "Memory",
+    "tool",
+    "ToolSchema",
+    "WorkflowResult",
+    "StepResult",
+    "NxAgentError",
+    "ToolExecutionError",
+    "AgentError",
+    "WorkflowError",
+]
+
+__version__ = "0.1.0"
+__author__ = "NxAgent Contributors"

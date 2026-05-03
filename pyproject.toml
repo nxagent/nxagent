@@ -1,0 +1,49 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "nx-agent"
+version = "0.1.0"
+description = "NxAgent — production-grade agentic framework for orchestrating multi-agent workflows, tool execution, and intelligent task routing."
+readme = "README.md"
+license = { text = "MIT" }
+authors = [{ name = "NxAgent Contributors" }]
+keywords = ["ai", "agents", "llm", "workflow", "orchestration", "multi-agent"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+requires-python = ">=3.10"
+dependencies = []   # zero hard deps — all LLM libs are optional
+
+[project.optional-dependencies]
+openai     = ["openai>=1.0"]
+anthropic  = ["anthropic>=0.25"]
+huggingface = ["huggingface_hub>=0.22"]
+all        = ["openai>=1.0", "anthropic>=0.25", "huggingface_hub>=0.22"]
+dev        = ["pytest>=8", "pytest-cov", "ruff", "mypy"]
+
+[project.urls]
+Homepage   = "https://github.com/your-org/nx-agent"
+Repository = "https://github.com/your-org/nx-agent"
+Changelog  = "https://github.com/your-org/nx-agent/blob/main/CHANGELOG.md"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["nx_agent*"]
+exclude = ["tests*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.mypy]
+python_version = "3.10"
+ignore_missing_imports = true

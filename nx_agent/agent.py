@@ -1,0 +1,268 @@
+"""
+Agent — the single unit of work in NxAgent.
+
+An Agent has a *role* and a *goal* and can be given a list of tools.
+It is intentionally backend-agnostic: swap `llm_backend` to use any LLM.
+"""
+
+from __future__ import annotations
+
+import time
+import textwrap
+from typing import Any, Callable, Dict, List, Optional
+
+from nx_agent.tool import ToolSchema, is_tool
+from nx_agent.memory import Memory
+from nx_agent.result import StepResult, ToolCall
+from nx_agent.exceptions import AgentError, ToolExecutionError
+
+
+# ── default LLM backend (stub — replace with real implementation) ────────────
+
+def _default_llm_backend(
+    system_prompt: str,
+    user_message: str,
+    tools: List[dict],
+    **kwargs,
+) -> str:
+    """
+    Stub backend used when no real LLM is configured.
+
+    Replace by passing ``llm_backend=your_function`` to the Agent, or by
+    setting the OPENAI_API_KEY / ANTHROPIC_API_KEY environment variable
+    (the built-in backends pick them up automatically via nx_agent.backends).
+    """
+    tool_names = [t["name"] for t in tools]
+    tools_txt = f" Available tools: {tool_names}." if tool_names else ""
+    return (
+        f"[NxAgent stub — no LLM configured]{tools_txt}\n"
+        f"Role: {system_prompt[:120]}\n"
+        f"Task: {user_message[:200]}"
+    )
+
+
+# ── Agent ─────────────────────────────────────────────────────────────────────
+
+class Agent:
+    """
+    A focused worker with a role, goal, optional tools, and memory.
+
+    Parameters
+    ----------
+    role        : Short label describing what this agent does
+                  (e.g. "Research Analyst").
+    goal        : The output objective (e.g. "Find accurate source material").
+    tools       : List of @tool-decorated callables this agent may invoke.
+    llm_backend : Callable(system, user, tools, **kw) → str.
+                  Defaults to the stub. Pass nx_agent.backends.openai_backend
+                  or nx_agent.backends.anthropic_backend, or your own.
+    max_iterations : Safety cap on tool-call loops (default 10).
+    memory_size : Number of short-term memory entries to keep.
+    verbose     : Print step traces to stdout.
+    kwargs      : Forwarded verbatim to llm_backend on every call.
+    """
+
+    def __init__(
+        self,
+        role: str,
+        goal: str,
+        tools: Optional[List[Callable]] = None,
+        llm_backend: Optional[Callable] = None,
+        max_iterations: int = 10,
+        memory_size: int = 20,
+        verbose: bool = False,
+        **kwargs,
+    ) -> None:
+        self.role = role
+        self.goal = goal
+        self.tools: List[Callable] = tools or []
+        self._llm_backend = llm_backend or _default_llm_backend
+        self.max_iterations = max_iterations
+        self.memory = Memory(max_short_entries=memory_size)
+        self.verbose = verbose
+        self._backend_kwargs = kwargs
+
+        # Validate tools
+        for t in self.tools:
+            if not is_tool(t):
+                raise AgentError(
+                    self.role,
+                    f"'{getattr(t, '__name__', t)}' is not decorated with @tool. "
+                    "Wrap it with @tool before passing to an Agent.",
+                )
+
+    # ── public API ────────────────────────────────────────────────────────────
+
+    def run(self, task: str, context: str = "") -> StepResult:
+        """
+        Execute the agent on *task*.
+
+        Parameters
+        ----------
+        task    : The natural-language task or question.
+        context : Optional upstream context (e.g. previous agent's output).
+
+        Returns
+        -------
+        StepResult with output text and full tool-call trace.
+        """
+        t_start = time.perf_counter()
+        tool_calls: List[ToolCall] = []
+
+        system_prompt = self._build_system_prompt()
+        user_message = self._build_user_message(task, context)
+
+        if self.verbose:
+            print(f"\n{'='*60}")
+            print(f"Agent [{self.role}] ← {task[:100]}")
+
+        # Agentic loop: call LLM → maybe invoke tools → repeat
+        current_message = user_message
+        final_output = ""
+
+        for iteration in range(self.max_iterations):
+            tool_schemas = [t.schema.to_dict() for t in self.tools]
+
+            try:
+                raw_output = self._llm_backend(
+                    system_prompt=system_prompt,
+                    user_message=current_message,
+                    tools=tool_schemas,
+                    **self._backend_kwargs,
+                )
+            except Exception as exc:
+                raise AgentError(self.role, str(exc)) from exc
+
+            # Check if output contains a tool call directive
+            # (Format: TOOL_CALL:<name>:<json_args>)
+            tool_directive = self._parse_tool_directive(raw_output)
+
+            if tool_directive is None:
+                # No tool call — LLM produced a final answer
+                final_output = raw_output
+                break
+
+            # Execute the tool
+            tool_name, tool_args = tool_directive
+            tc = self._invoke_tool(tool_name, tool_args)
+            tool_calls.append(tc)
+
+            if self.verbose:
+                print(f"  → Tool: {tc}")
+
+            # Feed tool result back as next user turn
+            tool_result = tc.output if tc.error is None else f"ERROR: {tc.error}"
+            current_message = (
+                f"Tool '{tool_name}' returned:\n{tool_result}\n\n"
+                f"Continue completing the task: {task}"
+            )
+
+        else:
+            # Hit max_iterations without a final answer
+            final_output = f"[Reached max_iterations={self.max_iterations}] {raw_output}"
+
+        duration_ms = (time.perf_counter() - t_start) * 1000
+
+        # Update short-term memory
+        self.memory.short.add("user", task)
+        self.memory.short.add("agent", final_output)
+
+        if self.verbose:
+            print(f"Agent [{self.role}] → {final_output[:120]}")
+
+        return StepResult(
+            agent_role=self.role,
+            input=task,
+            output=final_output,
+            tool_calls=tool_calls,
+            duration_ms=duration_ms,
+        )
+
+    # ── internals ─────────────────────────────────────────────────────────────
+
+    def _build_system_prompt(self) -> str:
+        parts = [
+            f"You are a {self.role}.",
+            f"Your goal: {self.goal}",
+        ]
+
+        lt_block = self.memory.long.to_prompt_block()
+        if lt_block:
+            parts.append(lt_block)
+
+        if self.tools:
+            tool_names = ", ".join(t.schema.name for t in self.tools)
+            parts.append(
+                f"\nYou have access to the following tools: {tool_names}.\n"
+                "To call a tool, respond ONLY with a line in this exact format:\n"
+                "TOOL_CALL:<tool_name>:{\"arg1\": \"value1\", ...}\n"
+                "After the tool returns a result, continue normally."
+            )
+
+        return "\n".join(parts)
+
+    def _build_user_message(self, task: str, context: str) -> str:
+        if context:
+            return f"Context from previous step:\n{context}\n\nTask: {task}"
+        return task
+
+    def _parse_tool_directive(self, text: str):
+        """
+        Parse a TOOL_CALL directive from LLM output.
+
+        Expected format (first matching line wins):
+            TOOL_CALL:<name>:<json_args>
+
+        Returns (name, args_dict) or None.
+        """
+        import json
+
+        for line in text.splitlines():
+            line = line.strip()
+            if line.startswith("TOOL_CALL:"):
+                parts = line.split(":", 2)
+                if len(parts) == 3:
+                    _, name, args_raw = parts
+                    try:
+                        args = json.loads(args_raw)
+                    except json.JSONDecodeError:
+                        args = {"input": args_raw}
+                    return name.strip(), args
+        return None
+
+    def _invoke_tool(self, tool_name: str, tool_args: Dict[str, Any]) -> ToolCall:
+        """Find and call the named tool; return a ToolCall record."""
+        t_start = time.perf_counter()
+
+        # Lookup
+        fn = next((t for t in self.tools if t.schema.name == tool_name), None)
+        if fn is None:
+            return ToolCall(
+                name=tool_name,
+                inputs=tool_args,
+                output=None,
+                error=f"Tool '{tool_name}' not found.",
+                duration_ms=0.0,
+            )
+
+        try:
+            output = fn(**tool_args)
+            error = None
+        except Exception as exc:
+            output = None
+            error = str(exc)
+
+        duration_ms = (time.perf_counter() - t_start) * 1000
+        return ToolCall(
+            name=tool_name,
+            inputs=tool_args,
+            output=output,
+            error=error,
+            duration_ms=duration_ms,
+        )
+
+    # ── dunder ────────────────────────────────────────────────────────────────
+
+    def __repr__(self) -> str:
+        tool_names = [t.schema.name for t in self.tools]
+        return f"Agent(role={self.role!r}, tools={tool_names})"
