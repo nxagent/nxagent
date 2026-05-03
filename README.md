@@ -1,6 +1,6 @@
 # NxAgent
 
-**Production-grade agentic framework for orchestrating multi-agent workflows, tool execution, and intelligent task routing.**
+**A production-grade agentic framework for orchestrating multi-agent workflows, tool execution, and intelligent task routing.**
 
 [![PyPI](https://img.shields.io/pypi/v/nx-agent)](https://pypi.org/project/nx-agent/)
 [![Python](https://img.shields.io/pypi/pyversions/nx-agent)](https://pypi.org/project/nx-agent/)
@@ -12,11 +12,11 @@
 
 | Feature | NxAgent |
 |---|---|
-| Zero hard dependencies | ✅ Bring your own LLM |
-| Pluggable backends | OpenAI · Anthropic · HuggingFace · custom |
+| Zero hard dependencies | Bring your own LLM |
+| Pluggable backends | OpenAI · Anthropic · Hugging Face · custom |
 | `@tool` decorator | Type hints → JSON schema automatically |
 | Multi-agent routing | Sequential · Parallel · LLM-driven · custom |
-| Built-in memory | Short-term (ring buffer) + long-term (key-value) |
+| Built-in memory | Short-term context + long-term key-value memory |
 | Full traceability | Every step, tool call, and timing captured |
 | Lifecycle hooks | `on_workflow_start/end`, `on_step_start/end` |
 
@@ -25,8 +25,6 @@
 ## Installation
 
 ```bash
-python -m venv .venv
-source .venv/bin/activate          # Windows: .venv\Scripts\activate
 pip install nx-agent               # core (no LLM deps)
 
 # Optional — pick your LLM backend
@@ -37,9 +35,9 @@ pip install nx-agent[all]          # everything
 
 ---
 
-## Quickstart
+## Quick Start
 
-### 01 — Single agent
+### 01 — Single Agent
 
 ```python
 from nx_agent import Agent
@@ -55,7 +53,7 @@ result = agent.run("What is NxAgent?")
 print(result.output)
 ```
 
-### 02 — Attach a tool
+### 02 — Attach a Tool
 
 ```python
 from nx_agent import Agent, tool
@@ -74,7 +72,7 @@ researcher = Agent(
 )
 ```
 
-### 03 — Multi-agent workflow
+### 03 — Multi-Agent Workflow
 
 ```python
 from nx_agent import Agent, Workflow, tool
@@ -108,7 +106,7 @@ print(result.pretty())      # human-readable summary
 
 ---
 
-## Routing strategies
+## Routing Strategies
 
 ```python
 from nx_agent import Workflow
@@ -120,12 +118,12 @@ wf = Workflow(agents=[a, b, c])
 # Parallel — all agents run concurrently on the same task
 wf = Workflow(agents=[a, b], router=Router("parallel"))
 
-# LLM-driven — an LLM picks the next agent at each step
+# LLM-driven — the model picks the next agent at each step
 wf = Workflow(agents=[a, b, c], router=Router("llm", llm_backend=my_llm))
 
 # Custom callable
 def my_router(task, agents, history):
-    return agents[0] if not history else None   # return None to stop
+    return agents[0] if not history else None  # return None to stop
 
 wf = Workflow(agents=[a, b], router=my_router)
 ```
@@ -134,11 +132,11 @@ wf = Workflow(agents=[a, b], router=my_router)
 
 ## Memory
 
-Each agent carries a `Memory` object with two tiers:
+Each agent can carry memory with short-term context and long-term key-value storage:
 
 ```python
-agent.memory.long.remember("user_name", "Alice")    # persists in system prompt
-agent.memory.short.add("user", "Hello")              # sliding window context
+agent.memory.long.remember("user_name", "Alice")  # long-term memory
+agent.memory.short.add("user", "Hello")           # short-term context
 
 # Full context string ready for injection
 print(agent.memory.build_context())
@@ -159,7 +157,7 @@ workflow = (
 
 ---
 
-## Result object
+## Result Object
 
 ```python
 result = workflow.run("my task")
@@ -175,60 +173,7 @@ step.agent_role          # "Research Analyst"
 step.tool_calls          # List[ToolCall]
 step.duration_ms         # float
 step.succeeded           # bool
-step.summary()           # "Research Analyst] tools=web_search duration=234ms"
-```
-
----
-
-## Backends
-
-| Backend | Factory | Extra install |
-|---|---|---|
-| OpenAI | `openai_backend(model="gpt-4o")` | `pip install nx-agent[openai]` |
-| Anthropic | `anthropic_backend(model="claude-opus-4-5")` | `pip install nx-agent[anthropic]` |
-| HuggingFace | `huggingface_backend(repo_id="...")` | `pip install nx-agent[huggingface]` |
-| Custom | Any `fn(system, user, tools, **kw) → str` | — |
-
----
-
-## Architecture
-
-```
-.
-├── pyproject.toml    # package metadata and tool config
-├── README.md         # project documentation
-├── tests/            # pytest test suite
-│   ├── test_agent.py
-│   ├── test_tool.py
-│   └── test_workflow.py
-└── nx_agent/         # importable Python package
-    ├── __init__.py   # public surface
-    ├── agent.py      # Agent class + agentic loop
-    ├── workflow.py   # Workflow orchestrator
-    ├── router.py     # Sequential / Parallel / LLM / custom routing
-    ├── tool.py       # @tool decorator + ToolSchema
-    ├── memory.py     # ShortTermMemory + LongTermMemory
-    ├── result.py     # StepResult + WorkflowResult
-    ├── backends.py   # OpenAI / Anthropic / HuggingFace factories
-    └── exceptions.py # Typed exception hierarchy
-```
-
-Import path:
-
-```python
-from nx_agent import Agent, Workflow, tool
-```
-
-Package distribution name:
-
-```bash
-pip install nx-agent
-```
-
-Source package name:
-
-```
-nx_agent/
+step.summary()           # "Research Analyst tools=web_search duration=234ms"
 ```
 
 ---
