@@ -180,4 +180,4 @@ step.summary()           # "Research Analyst tools=web_search duration=234ms"
 
 ## License
 
-MIT
+NxAgent is licensed under the MIT License.
