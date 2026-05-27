@@ -3,7 +3,12 @@
 import sys
 import types
 
-from nx_agent.backends import grok_backend, huggingface_backend, openai_backend
+from nx_agent.backends import (
+    grok_backend,
+    huggingface_backend,
+    ollama_backend,
+    openai_backend,
+)
 
 
 TOOL_SCHEMA = {
@@ -131,3 +136,55 @@ class TestHuggingFaceBackend:
         backend = huggingface_backend("provider/model", max_new_tokens=42)
 
         assert backend("system", "hello", []) == "done"
+
+
+class TestOllamaBackend:
+    def test_local_chat_maps_tools_and_response(self, monkeypatch):
+        constructed = {}
+
+        class FakeOllamaClient:
+            def __init__(self, **kwargs):
+                constructed.update(kwargs)
+
+            def chat(self, **kwargs):
+                constructed["request"] = kwargs
+                function = types.SimpleNamespace(
+                    name="lookup", arguments={"id": "local"}
+                )
+                message = types.SimpleNamespace(
+                    content="",
+                    tool_calls=[types.SimpleNamespace(function=function)],
+                )
+                return types.SimpleNamespace(message=message)
+
+        module = types.SimpleNamespace(Client=FakeOllamaClient)
+        monkeypatch.setitem(sys.modules, "ollama", module)
+
+        backend = ollama_backend(model="qwen3", host="http://localhost:11434")
+        output = backend("system", "find locally", [TOOL_SCHEMA])
+
+        assert output == 'TOOL_CALL:lookup:{"id": "local"}'
+        assert constructed["host"] == "http://localhost:11434"
+        assert constructed["request"]["model"] == "qwen3"
+        assert constructed["request"]["tools"] == [
+            {"type": "function", "function": TOOL_SCHEMA}
+        ]
+
+    def test_uses_ollama_default_host_configuration(self, monkeypatch):
+        constructed = {}
+
+        class FakeOllamaClient:
+            def __init__(self, **kwargs):
+                constructed["constructor"] = kwargs
+
+            def chat(self, **kwargs):
+                message = types.SimpleNamespace(content="local answer", tool_calls=None)
+                return types.SimpleNamespace(message=message)
+
+        module = types.SimpleNamespace(Client=FakeOllamaClient)
+        monkeypatch.setitem(sys.modules, "ollama", module)
+
+        output = ollama_backend()("system", "hello", [])
+
+        assert output == "local answer"
+        assert constructed["constructor"] == {}

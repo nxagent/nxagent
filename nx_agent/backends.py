@@ -230,3 +230,45 @@ def huggingface_backend(
         return _message_output(response.choices[0].message)
 
     return _backend
+
+
+def ollama_backend(
+    model: str = "qwen3",
+    host: Optional[str] = None,
+    **default_kwargs: Any,
+) -> Backend:
+    """Return an Ollama chat backend for local or remote Ollama hosts.
+
+    Requires ``pip install nx-agent[ollama]``. Ollama defaults to its locally
+    configured host, normally ``http://localhost:11434``. The selected model
+    must support tools when tools are attached to the agent.
+    """
+    try:
+        from ollama import Client  # type: ignore
+    except ImportError as exc:
+        raise ImportError("Install Ollama support: pip install nx-agent[ollama]") from exc
+
+    client = Client(host=host) if host is not None else Client()
+
+    def _backend(
+        system_prompt: str,
+        user_message: str,
+        tools: List[dict],
+        **kwargs: Any,
+    ) -> str:
+        request: Dict[str, Any] = {
+            "model": model,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_message},
+            ],
+            **default_kwargs,
+            **kwargs,
+        }
+        if tools:
+            request["tools"] = _function_tools(tools)
+
+        response = client.chat(**request)
+        return _message_output(response.message)
+
+    return _backend

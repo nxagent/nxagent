@@ -21,6 +21,12 @@ def greet(name: str, greeting: str = "Hello") -> str:
     return f"{greeting}, {name}!"
 
 
+@tool(retries=2, backoff=0.1, timeout=3)
+def configured_tool(value: str) -> str:
+    """Return a configured value."""
+    return value
+
+
 class TestToolDecorator:
     def test_callable(self):
         assert add(2, 3) == 5
@@ -62,3 +68,8 @@ class TestToolDecorator:
         registry = get_tool_registry()
         assert "add" in registry
         assert "greet" in registry
+
+    def test_resilience_configuration(self):
+        assert configured_tool.config.retry_policy.retries == 2
+        assert configured_tool.config.retry_policy.backoff == 0.1
+        assert configured_tool.config.timeout == 3

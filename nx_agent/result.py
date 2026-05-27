@@ -17,6 +17,8 @@ class ToolCall:
     output: Any
     error: Optional[str] = None
     duration_ms: float = 0.0
+    attempts: int = 1
+    timed_out: bool = False
 
     def to_dict(self) -> Dict[str, Any]:
         """Return a JSON-friendly dictionary for logging and traces."""

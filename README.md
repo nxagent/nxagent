@@ -13,11 +13,12 @@
 | Feature | NxAgent |
 |---|---|
 | Zero hard dependencies | Bring your own LLM |
-| Pluggable backends | OpenAI · Grok (xAI) · Hugging Face · Anthropic · custom |
+| Pluggable backends | OpenAI · Grok (xAI) · Hugging Face · Ollama · Anthropic · custom |
 | `@tool` decorator | Type hints → JSON schema automatically |
 | Multi-agent routing | Sequential · Parallel · LLM-driven · custom |
 | Built-in memory | Short-term context + long-term key-value memory |
 | Full traceability | Every step, tool call, and timing captured |
+| Opt-in resilience | Backend/tool retries and timeouts |
 | Lifecycle hooks | `on_workflow_start`, `on_workflow_end` |
 
 ---
@@ -31,6 +32,7 @@ pip install nx-agent               # core (no LLM deps)
 pip install nx-agent[openai]       # OpenAI
 pip install nx-agent[grok]         # xAI Grok (uses the OpenAI SDK)
 pip install nx-agent[huggingface]  # Hugging Face Inference Providers
+pip install nx-agent[ollama]       # local Ollama models
 pip install nx-agent[anthropic]    # Anthropic Claude
 pip install nx-agent[all]          # everything
 ```
@@ -118,6 +120,7 @@ from nx_agent.backends import (
     openai_backend,
     grok_backend,
     huggingface_backend,
+    ollama_backend,
 )
 
 openai_llm = openai_backend(model="gpt-4o")       # OPENAI_API_KEY
@@ -125,13 +128,71 @@ grok_llm = grok_backend(model="grok-4.3")         # XAI_API_KEY
 hf_llm = huggingface_backend(                     # HF_TOKEN
     repo_id="openai/gpt-oss-120b",
 )
+local_llm = ollama_backend(model="qwen3")          # local Ollama service
 ```
 
 `openai_backend()` and `grok_backend()` use chat-completion function tools.
 `grok_backend()` targets xAI's OpenAI-compatible `https://api.x.ai/v1`
 endpoint. `huggingface_backend()` uses `InferenceClient.chat_completion()`;
 choose a hosted model/provider that supports tool calling when attaching
-NxAgent tools.
+NxAgent tools. `ollama_backend()` uses Ollama's native chat/tool interface and
+its configured local service by default, normally `http://localhost:11434`.
+
+### Local Agent with Ollama
+
+After installing Ollama and pulling a tool-capable model:
+
+```bash
+ollama pull qwen3
+pip install nx-agent[ollama]
+```
+
+```python
+from nx_agent import Agent
+from nx_agent.backends import ollama_backend
+
+agent = Agent(
+    role="Local Assistant",
+    goal="Answer without a hosted API",
+    llm_backend=ollama_backend(model="qwen3"),
+)
+
+print(agent.run("Summarize this project.").output)
+```
+
+Pass `host="http://another-host:11434"` to connect to another Ollama server.
+
+---
+
+## Retries and Timeouts
+
+Retries and timeouts are opt-in, so existing agents retain their original
+single-attempt behavior.
+
+```python
+from nx_agent import Agent, RetryPolicy, tool
+from nx_agent.backends import openai_backend
+
+@tool(retries=2, backoff=0.5, timeout=10)
+def fetch_record(record_id: str) -> str:
+    """Fetch a record from an external service."""
+    ...
+
+agent = Agent(
+    role="Researcher",
+    goal="Retrieve and explain the record",
+    tools=[fetch_record],
+    llm_backend=openai_backend(),
+    retry_policy=RetryPolicy(retries=2, backoff=0.5),
+    timeout=30,
+)
+```
+
+Backend failures after all attempts raise `BackendError`; backend timeouts
+raise `AgentTimeoutError`. Tool failures remain in `ToolCall.error`, while
+`ToolCall.attempts` and `ToolCall.timed_out` show resilience behavior in the
+trace. A timed-out operation is not retried by default because Python cannot
+forcibly stop provider or tool work that has already started.
 
 ---
 
@@ -205,8 +266,13 @@ step = result.steps[0]
 step.agent_role          # "Research Analyst"
 step.tool_calls          # List[ToolCall]
 step.duration_ms         # float
+step.metadata            # {"backend_attempts": [1, ...]}
 step.succeeded           # bool
 step.summary()           # "Research Analyst tools=web_search duration=234ms"
+
+call = step.tool_calls[0]
+call.attempts           # int
+call.timed_out          # bool
 ```
 
 ---
@@ -219,17 +285,19 @@ Included in `0.1.0`:
 - Sequential, parallel, LLM-selected, and custom workflow routing.
 - Short-term and long-term in-process memory.
 - Structured step/tool traces plus JSON result export.
-- Optional OpenAI, Grok, Hugging Face, and Anthropic backends with no hard core dependencies.
+- Optional OpenAI, Grok, Hugging Face, Ollama, and Anthropic backends with no hard core dependencies.
+- Opt-in backend and tool retries/timeouts with typed backend timeout errors.
 
-Next milestones from the design guide are retries and timeouts, streaming,
-deeper observability, and reusable testing helpers. They are intentionally not
-presented as shipped features yet.
+Next milestones from the design guide are partial-result workflow recovery,
+streaming, deeper observability, and reusable testing helpers. They are
+intentionally not presented as shipped features yet.
 
 ## Backend References
 
 - OpenAI chat function calling: <https://platform.openai.com/docs/guides/function-calling?api-mode=chat>
 - xAI chat completions and function calling: <https://docs.x.ai/developers/model-capabilities/legacy/chat-completions> and <https://docs.x.ai/developers/tools/function-calling>
 - Hugging Face `InferenceClient.chat_completion`: <https://huggingface.co/docs/huggingface_hub/en/package_reference/inference_client>
+- Ollama tool calling and chat API: <https://docs.ollama.com/capabilities/tool-calling> and <https://docs.ollama.com/api/chat>
 
 ---
 
