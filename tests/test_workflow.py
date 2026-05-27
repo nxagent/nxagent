@@ -1,7 +1,9 @@
 """Tests for Workflow and Router."""
 
+import json
+
 import pytest
-from nx_agent import Agent, Workflow, tool
+from nx_agent import Agent, Workflow
 from nx_agent.result import WorkflowResult
 from nx_agent.router import Router
 from nx_agent.exceptions import WorkflowError
@@ -87,3 +89,12 @@ class TestWorkflow:
         assert "Task" in pretty
         assert "Output" in pretty
         assert "Step 1" in pretty
+
+    def test_workflow_result_serialization(self):
+        result = Workflow(agents=[make_agent("A")]).run("task", request_id="one")
+
+        as_dict = result.to_dict()
+        as_json = json.loads(result.to_json())
+
+        assert as_dict["steps"][0]["agent_role"] == "A"
+        assert as_json["metadata"]["request_id"] == "one"

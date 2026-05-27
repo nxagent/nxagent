@@ -1,6 +1,5 @@
 """Tests for the @tool decorator and ToolSchema."""
 
-import pytest
 from nx_agent import tool
 from nx_agent.tool import is_tool, get_tool_registry, ToolSchema
 

@@ -55,3 +55,4 @@ temp/
 # Nested Git metadata from accidental clones.
 # Keep source files in nested folders trackable, but never commit their .git data.
 **/.git/
+/docx/*

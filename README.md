@@ -1,6 +1,6 @@
 # NxAgent
 
-**A production-grade agentic framework for orchestrating multi-agent workflows, tool execution, and intelligent task routing.**
+**A lightweight Python library for agent workflows, Python tools, traces, memory, and swappable LLM backends.**
 
 [![PyPI](https://img.shields.io/pypi/v/nx-agent)](https://pypi.org/project/nx-agent/)
 [![Python](https://img.shields.io/pypi/pyversions/nx-agent)](https://pypi.org/project/nx-agent/)
@@ -13,12 +13,12 @@
 | Feature | NxAgent |
 |---|---|
 | Zero hard dependencies | Bring your own LLM |
-| Pluggable backends | OpenAI · Anthropic · Hugging Face · custom |
+| Pluggable backends | OpenAI · Grok (xAI) · Hugging Face · Anthropic · custom |
 | `@tool` decorator | Type hints → JSON schema automatically |
 | Multi-agent routing | Sequential · Parallel · LLM-driven · custom |
 | Built-in memory | Short-term context + long-term key-value memory |
 | Full traceability | Every step, tool call, and timing captured |
-| Lifecycle hooks | `on_workflow_start/end`, `on_step_start/end` |
+| Lifecycle hooks | `on_workflow_start`, `on_workflow_end` |
 
 ---
 
@@ -29,6 +29,8 @@ pip install nx-agent               # core (no LLM deps)
 
 # Optional — pick your LLM backend
 pip install nx-agent[openai]       # OpenAI
+pip install nx-agent[grok]         # xAI Grok (uses the OpenAI SDK)
+pip install nx-agent[huggingface]  # Hugging Face Inference Providers
 pip install nx-agent[anthropic]    # Anthropic Claude
 pip install nx-agent[all]          # everything
 ```
@@ -53,11 +55,11 @@ result = agent.run("What is NxAgent?")
 print(result.output)
 ```
 
-### 02 — Attach a Tool
+### 02 — Attach a Tool with Grok
 
 ```python
 from nx_agent import Agent, tool
-from nx_agent.backends import anthropic_backend
+from nx_agent.backends import grok_backend
 
 @tool
 def web_search(query: str) -> str:
@@ -68,7 +70,7 @@ researcher = Agent(
     role="Research Analyst",
     goal="Find accurate source material",
     tools=[web_search],
-    llm_backend=anthropic_backend(),
+    llm_backend=grok_backend(),  # reads XAI_API_KEY from env
 )
 ```
 
@@ -103,6 +105,33 @@ print(result.output)        # final answer
 print(result.steps)         # full trace
 print(result.pretty())      # human-readable summary
 ```
+
+---
+
+## Provider Backends
+
+Each factory returns the same callable interface, so changing providers does
+not change `Agent` or `Workflow` code.
+
+```python
+from nx_agent.backends import (
+    openai_backend,
+    grok_backend,
+    huggingface_backend,
+)
+
+openai_llm = openai_backend(model="gpt-4o")       # OPENAI_API_KEY
+grok_llm = grok_backend(model="grok-4.3")         # XAI_API_KEY
+hf_llm = huggingface_backend(                     # HF_TOKEN
+    repo_id="openai/gpt-oss-120b",
+)
+```
+
+`openai_backend()` and `grok_backend()` use chat-completion function tools.
+`grok_backend()` targets xAI's OpenAI-compatible `https://api.x.ai/v1`
+endpoint. `huggingface_backend()` uses `InferenceClient.chat_completion()`;
+choose a hosted model/provider that supports tool calling when attaching
+NxAgent tools.
 
 ---
 
@@ -150,10 +179,12 @@ print(agent.memory.build_context())
 workflow = (
     Workflow(agents=[researcher, writer])
     .on("on_workflow_start", lambda task: print(f"Starting: {task}"))
-    .on("on_step_end",       lambda step: print(f"Done: {step.summary()}"))
     .on("on_workflow_end",   lambda r: save_to_db(r))
 )
 ```
+
+The MVP currently fires workflow start and workflow end hooks. Per-step hooks
+are reserved for a later tracing release.
 
 ---
 
@@ -167,6 +198,8 @@ result.steps             # List[StepResult]
 result.total_duration_ms # float
 result.succeeded         # bool
 result.agents_used       # ["Research Analyst", "Technical Writer"]
+result.to_dict()         # serializable trace dictionary
+result.to_json()         # JSON for logs or persistence
 
 step = result.steps[0]
 step.agent_role          # "Research Analyst"
@@ -175,6 +208,28 @@ step.duration_ms         # float
 step.succeeded           # bool
 step.summary()           # "Research Analyst tools=web_search duration=234ms"
 ```
+
+---
+
+## MVP Scope
+
+Included in `0.1.0`:
+
+- `@tool` schema generation and a bounded agent tool loop.
+- Sequential, parallel, LLM-selected, and custom workflow routing.
+- Short-term and long-term in-process memory.
+- Structured step/tool traces plus JSON result export.
+- Optional OpenAI, Grok, Hugging Face, and Anthropic backends with no hard core dependencies.
+
+Next milestones from the design guide are retries and timeouts, streaming,
+deeper observability, and reusable testing helpers. They are intentionally not
+presented as shipped features yet.
+
+## Backend References
+
+- OpenAI chat function calling: <https://platform.openai.com/docs/guides/function-calling?api-mode=chat>
+- xAI chat completions and function calling: <https://docs.x.ai/developers/model-capabilities/legacy/chat-completions> and <https://docs.x.ai/developers/tools/function-calling>
+- Hugging Face `InferenceClient.chat_completion`: <https://huggingface.co/docs/huggingface_hub/en/package_reference/inference_client>
 
 ---
 

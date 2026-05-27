@@ -8,13 +8,12 @@ It is intentionally backend-agnostic: swap `llm_backend` to use any LLM.
 from __future__ import annotations
 
 import time
-import textwrap
 from typing import Any, Callable, Dict, List, Optional
 
-from nx_agent.tool import ToolSchema, is_tool
+from nx_agent.tool import is_tool
 from nx_agent.memory import Memory
 from nx_agent.result import StepResult, ToolCall
-from nx_agent.exceptions import AgentError, ToolExecutionError
+from nx_agent.exceptions import AgentError
 
 
 # ── default LLM backend (stub — replace with real implementation) ────────────
@@ -29,8 +28,7 @@ def _default_llm_backend(
     Stub backend used when no real LLM is configured.
 
     Replace by passing ``llm_backend=your_function`` to the Agent, or by
-    setting the OPENAI_API_KEY / ANTHROPIC_API_KEY environment variable
-    (the built-in backends pick them up automatically via nx_agent.backends).
+    selecting a built-in provider factory from ``nx_agent.backends``.
     """
     tool_names = [t["name"] for t in tools]
     tools_txt = f" Available tools: {tool_names}." if tool_names else ""
@@ -55,7 +53,7 @@ class Agent:
     tools       : List of @tool-decorated callables this agent may invoke.
     llm_backend : Callable(system, user, tools, **kw) → str.
                   Defaults to the stub. Pass nx_agent.backends.openai_backend
-                  or nx_agent.backends.anthropic_backend, or your own.
+                  / grok_backend / huggingface_backend, or your own.
     max_iterations : Safety cap on tool-call loops (default 10).
     memory_size : Number of short-term memory entries to keep.
     verbose     : Print step traces to stdout.

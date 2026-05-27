@@ -36,8 +36,7 @@ class Workflow:
     name    : Human-readable label for logging / tracing.
     verbose : Print per-step summaries to stdout.
     hooks   : Dict of lifecycle hooks:
-                  "on_step_start"  (agent, task)        → None
-                  "on_step_end"    (agent, StepResult)  → None
+                  "on_workflow_start"(task)              → None
                   "on_workflow_end"(WorkflowResult)      → None
     """
 
@@ -130,8 +129,7 @@ class Workflow:
         """
         Register a lifecycle hook and return *self* for chaining.
 
-        Events: "on_workflow_start", "on_workflow_end",
-                "on_step_start",     "on_step_end"
+        Events: "on_workflow_start", "on_workflow_end".
         """
         self.hooks[event] = fn
         return self

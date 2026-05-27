@@ -1,0 +1,418 @@
+
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
+  *{margin:0;padding:0;box-sizing:border-box}
+  :root{
+    --bg:#ffffff;--bg2:#f8f8f8;--bg3:#f2f2f5;--bg4:#ebebef;
+    --border:#e2e2e8;--border2:#d0d0da;
+    --text:#111118;--muted:#60607a;--dim:#9898b0;
+    --purple:#6d28d9;--purple-lt:#ede9fe;--purple-mid:#7c3aed;
+    --teal:#059669;--teal-lt:#d1fae5;
+    --amber:#d97706;--amber-lt:#fef3c7;
+    --coral:#e11d48;--coral-lt:#ffe4e6;
+    --blue:#2563eb;--blue-lt:#dbeafe;
+    --nav-w:200px;
+  }
+  body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;display:flex;font-size:14px;line-height:1.6}
+  .sidebar{width:var(--nav-w);min-height:100vh;border-right:1px solid var(--border);padding:24px 0;position:fixed;top:0;left:0;background:var(--bg);z-index:50;overflow-y:auto}
+  .sidebar-title{font-size:11px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--dim);padding:0 20px 16px}
+  .nav-item{display:flex;align-items:center;gap:10px;padding:9px 20px;cursor:pointer;border-radius:0;font-size:13px;font-weight:400;color:var(--muted);border:none;background:none;width:100%;text-align:left;transition:all .15s;border-left:2px solid transparent;font-family:'Inter',sans-serif}
+  .nav-item:hover{color:var(--text);background:var(--bg3)}
+  .nav-item.active{color:var(--purple);background:var(--purple-lt);border-left-color:var(--purple);font-weight:500}
+  .nav-num{font-size:11px;font-weight:600;color:inherit;opacity:.6;min-width:14px}
+  .main{margin-left:var(--nav-w);flex:1;padding:40px 44px;max-width:760px}
+
+  .chip{display:inline-block;padding:3px 10px;border-radius:4px;font-size:10px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;margin-bottom:10px}
+  .chip-p{background:var(--purple-lt);color:var(--purple)}
+  .chip-t{background:var(--teal-lt);color:var(--teal)}
+  .chip-a{background:var(--amber-lt);color:var(--amber)}
+  .chip-c{background:var(--coral-lt);color:var(--coral)}
+  .chip-b{background:var(--blue-lt);color:var(--blue)}
+  h2{font-size:22px;font-weight:600;margin-bottom:8px;color:var(--text);line-height:1.3}
+  h3{font-size:15px;font-weight:600;margin-bottom:8px;color:var(--text)}
+  .lead{font-size:14px;color:var(--muted);line-height:1.75;margin-bottom:28px}
+  .section{display:none}.section.active{display:block}
+  .sep{border:none;border-top:1px solid var(--border);margin:28px 0}
+
+  .card{background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:20px;margin-bottom:14px}
+  .card-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px;margin-bottom:20px}
+  .card-sm{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:14px}
+  .al{border-left:3px solid var(--purple);border-radius:0 8px 8px 0}
+  .at{border-left:3px solid var(--teal);border-radius:0 8px 8px 0}
+  .aa{border-left:3px solid var(--amber);border-radius:0 8px 8px 0}
+  .ac{border-left:3px solid var(--coral);border-radius:0 8px 8px 0}
+  .ab{border-left:3px solid var(--blue);border-radius:0 8px 8px 0}
+
+  .compare-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-bottom:20px}
+  .ccard{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:14px;font-size:12px}
+  .ccard.you{border-color:var(--purple);background:var(--purple-lt)}
+  .ccard .cn{font-size:13px;font-weight:600;margin-bottom:8px;color:var(--text)}
+  .ccard.you .cn{color:var(--purple)}
+  .ccard .pros{color:var(--teal);line-height:1.8}
+  .ccard .cons{color:var(--coral);line-height:1.8;margin-top:4px}
+
+  pre{background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:14px;overflow-x:auto;margin:10px 0}
+  code{font-family:'JetBrains Mono',monospace;font-size:12px;line-height:1.6}
+  .kw{color:var(--purple)}.st{color:var(--teal)}.cm{color:var(--dim)}.fn{color:var(--amber)}.cls{color:var(--blue)}.num{color:var(--coral)}
+  ic{background:var(--bg3);border-radius:4px;padding:1px 5px;font-family:monospace;font-size:12px;color:var(--text)}
+
+  table{width:100%;border-collapse:collapse;font-size:13px;margin-bottom:16px}
+  th{text-align:left;padding:9px 12px;font-size:11px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);border-bottom:1px solid var(--border)}
+  td{padding:9px 12px;border-bottom:1px solid var(--border);color:var(--text)}
+  tr:last-child td{border-bottom:none}
+
+  .step{display:flex;gap:16px;margin-bottom:22px;align-items:flex-start}
+  .sn{width:30px;height:30px;border-radius:50%;background:var(--purple-lt);color:var(--purple);font-size:13px;font-weight:600;display:flex;align-items:center;justify-content:center;flex-shrink:0;border:1px solid #d8b4fe}
+  .sb p{font-size:13px;color:var(--muted);line-height:1.65}
+
+  .arch{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:20px;margin-bottom:20px}
+  .arch-row{display:flex;gap:8px;justify-content:center;margin-bottom:6px;flex-wrap:wrap}
+  .arch-box{padding:8px 14px;border-radius:6px;font-size:12px;font-weight:500;text-align:center;border:1px solid}
+  .arch-arrow{text-align:center;color:var(--dim);font-size:16px;margin:2px 0}
+  .arch-label{font-size:10px;color:var(--dim);text-align:center;margin-bottom:12px;letter-spacing:.05em;text-transform:uppercase}
+  .l0{background:var(--purple-lt);border-color:#c4b5fd;color:var(--purple)}
+  .l1{background:var(--teal-lt);border-color:#6ee7b7;color:var(--teal)}
+  .l2{background:var(--amber-lt);border-color:#fcd34d;color:var(--amber)}
+  .l3{background:var(--coral-lt);border-color:#fda4af;color:var(--coral)}
+  .l4{background:var(--blue-lt);border-color:#93c5fd;color:var(--blue)}
+
+  .bar-wrap{margin-bottom:14px}
+  .bar-label{display:flex;justify-content:space-between;font-size:12px;margin-bottom:5px;color:var(--muted)}
+  .bar-label span:last-child{font-weight:600;color:var(--text)}
+  .bar-bg{background:var(--bg3);border-radius:4px;height:5px}
+  .bar-fill{height:5px;border-radius:4px}
+  .fp{background:var(--purple)}.ft{background:var(--teal)}.fa{background:var(--amber)}.fc{background:var(--coral)}.fb{background:var(--blue)}
+
+  .tag{display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600}
+  .tg-must{background:var(--purple-lt);color:var(--purple)}
+  .tg-hi{background:var(--teal-lt);color:var(--teal)}
+  .tg-imp{background:var(--amber-lt);color:var(--amber)}
+  .tg-grow{background:var(--coral-lt);color:var(--coral)}
+
+  .check-item{display:flex;gap:10px;align-items:flex-start;padding:10px 0;border-bottom:1px solid var(--border)}
+  .check-item:last-child{border-bottom:none}
+  .cdot{width:18px;height:18px;border-radius:50%;flex-shrink:0;margin-top:2px;display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:700}
+  .dm{background:var(--purple-lt);color:var(--purple)}
+  .dd{background:var(--teal-lt);color:var(--teal)}
+  .dw{background:var(--amber-lt);color:var(--amber)}
+  .dx{background:var(--coral-lt);color:var(--coral)}
+  .check-text{font-size:13px;line-height:1.65;color:var(--muted)}
+  .check-text strong{color:var(--text)}
+  .sec-label{font-size:11px;color:var(--dim);font-weight:600;text-transform:uppercase;letter-spacing:.08em;margin:18px 0 4px;padding-bottom:4px;border-bottom:1px solid var(--border)}
+
+  .hero-section{margin-bottom:32px}
+  .hero-section h2{font-size:26px;margin-bottom:6px}
+  .badges{display:flex;flex-wrap:wrap;gap:6px;margin-top:14px}
+  .badge{display:inline-flex;align-items:center;gap:5px;padding:4px 10px;border-radius:5px;font-size:12px;font-weight:500}
+  .bp{background:var(--purple-lt);color:var(--purple)}.bt{background:var(--teal-lt);color:var(--teal)}.ba{background:var(--amber-lt);color:var(--amber)}
+</style>
+
+<div class="sidebar">
+  <div class="sidebar-title">NxAgent Docs</div>
+  <button class="nav-item active" onclick="show('market',this)"><span class="nav-num">1</span> Market</button>
+  <button class="nav-item" onclick="show('arch',this)"><span class="nav-num">2</span> Architecture</button>
+  <button class="nav-item" onclick="show('modules',this)"><span class="nav-num">3</span> Modules</button>
+  <button class="nav-item" onclick="show('diff',this)"><span class="nav-num">4</span> Differentiation</button>
+  <button class="nav-item" onclick="show('build',this)"><span class="nav-num">5</span> Build order</button>
+  <button class="nav-item" onclick="show('checklist',this)"><span class="nav-num">6</span> Checklist</button>
+</div>
+
+<div class="main">
+
+<div class="section active" id="sec-market">
+  <div class="hero-section">
+    <div class="chip chip-p">Design document v1.0</div>
+    <h2>How to build a world-class agent framework</h2>
+    <p class="lead">A step-by-step guide for Python developers entering the agentic AI market — covering architecture, differentiation, what to build, and how to shine.</p>
+    <div class="badges">
+      <span class="badge bp">NxAgent</span>
+      <span class="badge bt">Production-grade</span>
+      <span class="badge ba">PyPI: nx-agent</span>
+    </div>
+  </div>
+  <div class="chip chip-p">Section 1</div>
+  <h2>The market landscape</h2>
+  <p class="lead">Before writing one line of code, understand who you're competing with and where the white space is.</p>
+  <div class="compare-grid">
+    <div class="ccard"><div class="cn">LangChain</div><div class="pros">✓ Huge community<br>✓ 1000+ integrations<br>✓ Well documented</div><div class="cons">✗ Abstraction hell<br>✗ Hard to debug<br>✗ Heavy dependencies</div></div>
+    <div class="ccard"><div class="cn">CrewAI</div><div class="pros">✓ Role-based agents<br>✓ Clean API</div><div class="cons">✗ Opinionated flow<br>✗ Cloud lock-in push</div></div>
+    <div class="ccard"><div class="cn">AutoGen</div><div class="pros">✓ MS backing<br>✓ Multi-agent chat</div><div class="cons">✗ Research-y feel<br>✗ Poor observability</div></div>
+    <div class="ccard"><div class="cn">Strands</div><div class="pros">✓ AWS native<br>✓ Simple tools API</div><div class="cons">✗ AWS-only focus<br>✗ New / immature</div></div>
+    <div class="ccard you"><div class="cn">NxAgent ← you</div><div class="pros">✓ Zero dependencies<br>✓ Full observability<br>✓ Pluggable backends<br>✓ 3 routing modes<br>✓ Memory built-in</div><div class="cons">Gap to close:<br>— Integrations<br>— Streaming<br>— Docs & examples</div></div>
+  </div>
+  <hr class="sep">
+  <h3>What does the market actually want?</h3>
+  <p style="font-size:13px;color:var(--muted);margin-bottom:16px">Real pain points from GitHub issues, Reddit threads, and dev forums across major frameworks:</p>
+  <div class="card-grid">
+    <div class="card-sm al"><div class="chip chip-p" style="font-size:9px;padding:2px 7px">Pain 1</div><h3>Debuggability</h3><p style="font-size:12px;color:var(--muted)">Developers hate black-box agents. They want to see exactly what was called, with what args, and what came back.</p></div>
+    <div class="card-sm at"><div class="chip chip-t" style="font-size:9px;padding:2px 7px">Pain 2</div><h3>Vendor lock-in</h3><p style="font-size:12px;color:var(--muted)">Switching from OpenAI to Anthropic should be one line change. Most frameworks make it a nightmare.</p></div>
+    <div class="card-sm aa"><div class="chip chip-a" style="font-size:9px;padding:2px 7px">Pain 3</div><h3>Over-engineering</h3><p style="font-size:12px;color:var(--muted)">LangChain's LCEL, Chains, Callbacks, Runnables — beginners give up. Simple things should be simple.</p></div>
+    <div class="card-sm ac"><div class="chip chip-c" style="font-size:9px;padding:2px 7px">Pain 4</div><h3>No memory story</h3><p style="font-size:12px;color:var(--muted)">Short-term and long-term memory are bolted on as afterthoughts in most frameworks.</p></div>
+    <div class="card-sm ab"><div class="chip chip-b" style="font-size:9px;padding:2px 7px">Pain 5</div><h3>Hard to test</h3><p style="font-size:12px;color:var(--muted)">Agents that depend on live LLMs can't be unit tested. Swappable backends make mocking trivial.</p></div>
+    <div class="card-sm al"><div class="chip chip-p" style="font-size:9px;padding:2px 7px">Pain 6</div><h3>No production path</h3><p style="font-size:12px;color:var(--muted)">Easy to prototype, impossible to deploy. Retries, timeouts, error handling are missing.</p></div>
+  </div>
+</div>
+
+<div class="section" id="sec-arch">
+  <div class="chip chip-t">Section 2</div>
+  <h2>System architecture</h2>
+  <p class="lead">A production-grade framework has 5 distinct layers. Each layer has one job. They only talk to adjacent layers.</p>
+  <div class="arch">
+    <div class="arch-label">User code (your application)</div>
+    <div class="arch-row"><div class="arch-box l0" style="width:200px">Workflow</div><div class="arch-box l0" style="width:200px">Agent (standalone)</div></div>
+    <div class="arch-arrow">↓</div>
+    <div class="arch-label">Orchestration layer</div>
+    <div class="arch-row"><div class="arch-box l1">Router</div><div class="arch-box l1">Task planner</div><div class="arch-box l1">Context manager</div></div>
+    <div class="arch-arrow">↓</div>
+    <div class="arch-label">Agent core (the thinking loop)</div>
+    <div class="arch-row"><div class="arch-box l2">Agent</div><div class="arch-box l2">Agentic loop</div><div class="arch-box l2">Memory</div></div>
+    <div class="arch-arrow">↓</div>
+    <div class="arch-label">Tool & LLM execution</div>
+    <div class="arch-row"><div class="arch-box l3">Tool executor</div><div class="arch-box l3">Tool registry</div><div class="arch-box l3">LLM backend</div></div>
+    <div class="arch-arrow">↓</div>
+    <div class="arch-label">Infrastructure (observability, storage, errors)</div>
+    <div class="arch-row"><div class="arch-box l4">Tracer</div><div class="arch-box l4">Logger</div><div class="arch-box l4">Retry engine</div><div class="arch-box l4">Result store</div></div>
+  </div>
+  <hr class="sep">
+  <h3>What is the "agentic loop"?</h3>
+  <p style="font-size:13px;color:var(--muted);margin-bottom:16px;line-height:1.7">This is the heart of every agent framework. Understanding this loop is the most important thing you'll learn:</p>
+  <div class="card" style="margin-bottom:20px">
+    <div class="step"><div class="sn">1</div><div class="sb"><h3>Receive task + context</h3><p>The agent gets a task string and any context from previous agents. It builds a system prompt from its role, goal, long-term memory, and available tools.</p></div></div>
+    <div class="step"><div class="sn">2</div><div class="sb"><h3>Call the LLM</h3><p>Send the system prompt + task to the LLM backend. The LLM sees the list of available tools and decides: answer directly, or call a tool first.</p></div></div>
+    <div class="step"><div class="sn">3</div><div class="sb"><h3>Parse the response</h3><p>Did the LLM return a <ic>TOOL_CALL:name:{args}</ic> directive? If yes — execute the tool. If no — this is the final answer. Go to step 5.</p></div></div>
+    <div class="step"><div class="sn">4</div><div class="sb"><h3>Execute tool → feed result back</h3><p>Run the Python function. Record the result in the trace. Append the tool result to the conversation and loop back to step 2.</p></div></div>
+    <div class="step"><div class="sn">5</div><div class="sb"><h3>Return StepResult</h3><p>Package the final answer, all tool calls, timing, and metadata into a StepResult. Update short-term memory. Return to the Workflow.</p></div></div>
+  </div>
+  <h3>Key design rule: layers only talk down</h3>
+  <p style="font-size:13px;color:var(--muted);margin-bottom:14px;line-height:1.7">The Workflow calls Agents. Agents call the LLM Backend and Tool Executor. The Tool Executor calls Python functions. <strong>Nothing calls upward.</strong></p>
+  <div class="card-grid">
+    <div class="card-sm at"><h3 style="color:var(--teal)">Good ✓</h3><p style="font-size:12px;color:var(--muted)">Workflow → Agent → LLM<br>Agent → ToolExecutor → fn()<br>Tracer records everything passively</p></div>
+    <div class="card-sm ac"><h3 style="color:var(--coral)">Bad ✗</h3><p style="font-size:12px;color:var(--muted)">Tool calling back into Agent<br>LLM Backend talking to Router<br>Memory modifying Workflow state</p></div>
+  </div>
+</div>
+
+<div class="section" id="sec-modules">
+  <div class="chip chip-a">Section 3</div>
+  <h2>Every module, explained</h2>
+  <p class="lead">Here is every file you need to build, what it does, and what decisions matter inside it.</p>
+
+  <div class="card al" style="margin-bottom:12px">
+    <h3>tool.py — The @tool decorator</h3>
+    <p style="font-size:13px;color:var(--muted);margin-bottom:10px;line-height:1.7"><strong>Job:</strong> Turn a normal Python function into something an LLM can use. It reads the type hints and docstring to build a JSON schema automatically.</p>
+    <pre><code><span class="kw">@tool</span>
+<span class="kw">def</span> <span class="fn">web_search</span>(query: <span class="cls">str</span>) -> <span class="cls">str</span>:
+    <span class="st">"""Search the web for current information."""</span>
+    <span class="kw">return</span> requests.get(url).text
+
+<span class="cm"># What the decorator builds automatically:</span>
+<span class="cm"># { "name": "web_search",</span>
+<span class="cm">#   "description": "Search the web for current information.",</span>
+<span class="cm">#   "parameters": { "query": {"type": "string"} } }</span></code></pre>
+    <p style="font-size:12px;color:var(--muted)"><strong style="color:var(--amber)">Key decision:</strong> The function must remain callable as normal Python. The decorator only <em>adds</em> a .schema attribute — it never wraps the function in a way that breaks normal use.</p>
+  </div>
+
+  <div class="card at" style="margin-bottom:12px">
+    <h3>agent.py — The Agent class</h3>
+    <p style="font-size:13px;color:var(--muted);margin-bottom:10px;line-height:1.7"><strong>Job:</strong> One focused worker. It has a role, a goal, and optional tools. It runs the agentic loop and returns a StepResult.</p>
+    <div style="font-size:13px;color:var(--muted);line-height:1.9">
+      — <strong style="color:var(--text)">max_iterations:</strong> A safety cap on the tool loop. Without this, a confused LLM loops forever.<br>
+      — <strong style="color:var(--text)">Backend-agnostic:</strong> The Agent calls <ic>llm_backend(system, user, tools) → str</ic>. It never imports OpenAI or Anthropic directly.<br>
+      — <strong style="color:var(--text)">Tool validation on init:</strong> Fail loudly at construction time. Never fail silently at runtime.
+    </div>
+  </div>
+
+  <div class="card aa" style="margin-bottom:12px">
+    <h3>memory.py — Two-tier memory</h3>
+    <p style="font-size:13px;color:var(--muted);margin-bottom:10px;line-height:1.7"><strong>Job:</strong> Every agent has a Memory object with two tiers.</p>
+    <div class="card-grid" style="margin-top:10px">
+      <div class="card-sm"><h3 style="font-size:13px;color:var(--teal)">ShortTermMemory</h3><p style="font-size:12px;color:var(--muted)">A deque with maxlen=20. Stores recent turns. Automatically evicts old entries. Builds conversation context for the LLM.</p></div>
+      <div class="card-sm"><h3 style="font-size:13px;color:var(--purple)">LongTermMemory</h3><p style="font-size:12px;color:var(--muted)">A dict of facts. Always injected into the system prompt. Survives context window resets. Never evicted.</p></div>
+    </div>
+  </div>
+
+  <div class="card ac" style="margin-bottom:12px">
+    <h3>router.py — Routing strategies</h3>
+    <p style="font-size:13px;color:var(--muted);margin-bottom:10px;line-height:1.7"><strong>Job:</strong> Decide which agent runs next and in what order.</p>
+    <table>
+      <tr><th>Strategy</th><th>How it works</th><th>Best for</th></tr>
+      <tr><td><ic>sequential</ic></td><td>A→B→C, output chains</td><td>Research → Write → Review</td></tr>
+      <tr><td><ic>parallel</ic></td><td>All agents at once</td><td>Multi-perspective analysis</td></tr>
+      <tr><td><ic>llm</ic></td><td>LLM picks next agent</td><td>Dynamic, unknown tasks</td></tr>
+      <tr><td><ic>custom fn</ic></td><td>Your Python logic</td><td>Business-specific rules</td></tr>
+    </table>
+  </div>
+
+  <div class="card ab" style="margin-bottom:12px">
+    <h3>result.py — Full observability</h3>
+    <pre><code><span class="cm"># WorkflowResult</span>
+result.output          <span class="cm"># final answer string</span>
+result.steps           <span class="cm"># List[StepResult]</span>
+result.total_duration_ms
+result.succeeded
+
+<span class="cm"># StepResult (per agent)</span>
+step.agent_role
+step.tool_calls        <span class="cm"># List[ToolCall]</span>
+step.duration_ms
+
+<span class="cm"># ToolCall (per tool invocation)</span>
+tc.name
+tc.inputs              <span class="cm"># exactly what args were passed</span>
+tc.output              <span class="cm"># what came back</span>
+tc.error               <span class="cm"># None if succeeded</span>
+tc.duration_ms</code></pre>
+  </div>
+
+  <div class="card al" style="margin-bottom:12px">
+    <h3>backends.py — Pluggable LLMs</h3>
+    <p style="font-size:13px;color:var(--muted);margin-bottom:10px;line-height:1.7"><strong>Job:</strong> Every backend is just a function: <ic>fn(system, user, tools) → str</ic>. Swapping LLMs is one line.</p>
+    <div class="card-grid">
+      <div class="card-sm" style="font-size:12px;color:var(--muted)"><strong style="color:var(--text)">openai_backend()</strong><br>Uses function_calling. Maps tools to OpenAI format. Handles tool_calls in response.</div>
+      <div class="card-sm" style="font-size:12px;color:var(--muted)"><strong style="color:var(--text)">anthropic_backend()</strong><br>Uses Claude's tool_use blocks. Maps to Anthropic schema.</div>
+      <div class="card-sm" style="font-size:12px;color:var(--muted)"><strong style="color:var(--text)">Custom fn</strong><br>Any callable that returns a string. Use for local models or mocking in tests.</div>
+    </div>
+  </div>
+</div>
+
+<div class="section" id="sec-diff">
+  <div class="chip chip-c">Section 4</div>
+  <h2>How to shine</h2>
+  <p class="lead">The gap between "another agent framework" and "the one developers choose" is in these five bets.</p>
+
+  <div class="card al" style="margin-bottom:14px"><h3>Bet 1 — Observability as a first-class citizen</h3><p style="font-size:13px;color:var(--muted);margin-bottom:8px;line-height:1.7">LangChain added LangSmith as a paid product. You should make full trace visibility free and built-in. Every framework user's first question when something breaks is "what actually happened?" Answer it before they ask.</p><p style="font-size:12px;color:var(--muted)"><strong style="color:var(--teal)">To build:</strong> OpenTelemetry spans per step. Export to Jaeger/Grafana. A <ic>result.pretty()</ic> that prints a full tree. A <ic>result.to_json()</ic> for logging pipelines.</p></div>
+  <div class="card at" style="margin-bottom:14px"><h3>Bet 2 — Zero-friction tool creation</h3><p style="font-size:13px;color:var(--muted);margin-bottom:8px;line-height:1.7">Add a tool library of 30+ pre-built tools (web_search, code_executor, file_reader, calculator, etc.) that work out of the box. Developers love copy-pasting a working example.</p><p style="font-size:12px;color:var(--muted)"><strong style="color:var(--teal)">To build:</strong> <ic>nx_agent.tools.web</ic>, <ic>nx_agent.tools.code</ic>, <ic>nx_agent.tools.files</ic>. Each module is optional. Tool docs auto-generate from schema.</p></div>
+  <div class="card aa" style="margin-bottom:14px"><h3>Bet 3 — Streaming support</h3><p style="font-size:13px;color:var(--muted);margin-bottom:8px;line-height:1.7">Every serious production app streams tokens. LangChain's streaming is notoriously broken. Being the framework that "just works" with streaming is a massive differentiator.</p><p style="font-size:12px;color:var(--muted)"><strong style="color:var(--teal)">To build:</strong> <ic>agent.stream(task)</ic> that yields tokens as they arrive. <ic>workflow.stream(task)</ic> that yields per-agent chunks with step boundaries.</p></div>
+  <div class="card ac" style="margin-bottom:14px"><h3>Bet 4 — Retry and resilience built-in</h3><p style="font-size:13px;color:var(--muted);margin-bottom:8px;line-height:1.7">LLM APIs have rate limits. Tools fail. Networks hiccup. Most frameworks leave all of this to the user. Ship a retry engine with exponential backoff and graceful degradation.</p><p style="font-size:12px;color:var(--muted)"><strong style="color:var(--teal)">To build:</strong> <ic>@tool(retries=3, backoff=2.0)</ic>. An Agent-level <ic>retry_policy</ic>. A circuit breaker that stops hammering a failing API.</p></div>
+  <div class="card ab" style="margin-bottom:14px"><h3>Bet 5 — First-class testing utilities</h3><p style="font-size:13px;color:var(--muted);margin-bottom:8px;line-height:1.7">Nobody else ships a proper mock LLM backend for testing. Being the framework where agent workflows are fully unit-testable will win enterprise adoption.</p><p style="font-size:12px;color:var(--muted)"><strong style="color:var(--teal)">To build:</strong> <ic>MockBackend</ic> that replays recorded conversations. <ic>assert_tool_called(result, "web_search")</ic>. pytest fixtures.</p></div>
+
+  <hr class="sep">
+  <h3>Market readiness (honest assessment)</h3>
+  <p style="font-size:13px;color:var(--muted);margin-bottom:16px">Where NxAgent stands today vs. where it needs to be:</p>
+  <div class="bar-wrap"><div class="bar-label"><span>Core architecture</span><span>85%</span></div><div class="bar-bg"><div class="bar-fill fp" style="width:85%"></div></div></div>
+  <div class="bar-wrap"><div class="bar-label"><span>Tool system</span><span>70%</span></div><div class="bar-bg"><div class="bar-fill ft" style="width:70%"></div></div></div>
+  <div class="bar-wrap"><div class="bar-label"><span>Observability / tracing</span><span>55%</span></div><div class="bar-bg"><div class="bar-fill fa" style="width:55%"></div></div></div>
+  <div class="bar-wrap"><div class="bar-label"><span>Streaming support</span><span>10%</span></div><div class="bar-bg"><div class="bar-fill fc" style="width:10%"></div></div></div>
+  <div class="bar-wrap"><div class="bar-label"><span>Built-in tool library</span><span>5%</span></div><div class="bar-bg"><div class="bar-fill fb" style="width:5%"></div></div></div>
+  <div class="bar-wrap"><div class="bar-label"><span>Testing utilities</span><span>30%</span></div><div class="bar-bg"><div class="bar-fill fp" style="width:30%"></div></div></div>
+  <div class="bar-wrap"><div class="bar-label"><span>Documentation / examples</span><span>20%</span></div><div class="bar-bg"><div class="bar-fill ft" style="width:20%"></div></div></div>
+  <div class="bar-wrap"><div class="bar-label"><span>Community / ecosystem</span><span>2%</span></div><div class="bar-bg"><div class="bar-fill fa" style="width:2%"></div></div></div>
+</div>
+
+<div class="section" id="sec-build">
+  <div class="chip chip-b">Section 5</div>
+  <h2>Build order: phase by phase</h2>
+  <p class="lead">Build in this exact order. Each phase produces something shippable. Never jump ahead.</p>
+
+  <div class="card al" style="margin-bottom:14px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><h3>Phase 1 — The core (weeks 1–3)</h3><span class="tag tg-must">Ship this</span></div>
+    <div style="font-size:13px;color:var(--muted);line-height:2.1">
+      ✓ <ic>@tool</ic> decorator with auto-schema<br>
+      ✓ <ic>Agent</ic> with agentic loop<br>
+      ✓ <ic>Workflow</ic> + <ic>Router</ic> (sequential/parallel)<br>
+      ✓ <ic>Memory</ic> (short + long term)<br>
+      ✓ <ic>WorkflowResult</ic> + <ic>StepResult</ic><br>
+      ✓ OpenAI + Anthropic backends<br>
+      ✓ 25 unit tests passing
+    </div>
+  </div>
+  <div class="card at" style="margin-bottom:14px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><h3>Phase 2 — Resilience (weeks 4–6)</h3><span class="tag tg-hi">High priority</span></div>
+    <div style="font-size:13px;color:var(--muted);line-height:2.1">
+      □ Retry engine with exponential backoff for tools and LLM calls<br>
+      □ Timeout per agent and per tool<br>
+      □ <ic>@tool(retries=3, timeout=10)</ic> decorator params<br>
+      □ Graceful degradation: return partial results if one agent fails<br>
+      □ Rate limit detection and automatic backoff<br>
+      □ Structured error hierarchy: AgentError, ToolTimeoutError, etc.
+    </div>
+  </div>
+  <div class="card aa" style="margin-bottom:14px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><h3>Phase 3 — Streaming (weeks 7–9)</h3><span class="tag tg-hi">High priority</span></div>
+    <div style="font-size:13px;color:var(--muted);line-height:2.1">
+      □ <ic>agent.stream(task)</ic> → AsyncGenerator[str, None]<br>
+      □ <ic>workflow.stream(task)</ic> with step boundary events<br>
+      □ StreamEvent types: token, tool_start, tool_end, step_start, step_end<br>
+      □ Both OpenAI and Anthropic streaming backends<br>
+      □ Streaming works through tool calls (not just final output)
+    </div>
+  </div>
+  <div class="card ac" style="margin-bottom:14px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><h3>Phase 4 — Observability (weeks 10–12)</h3><span class="tag tg-imp">Important</span></div>
+    <div style="font-size:13px;color:var(--muted);line-height:2.1">
+      □ OpenTelemetry integration: one span per step, one span per tool call<br>
+      □ Structured JSON logging via standard library<br>
+      □ <ic>result.to_json()</ic> for log pipelines<br>
+      □ Token usage tracking per step and per workflow<br>
+      □ Cost estimation (tokens × model pricing)<br>
+      □ Visual trace viewer (HTML output from result.pretty_html())
+    </div>
+  </div>
+  <div class="card ab" style="margin-bottom:14px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><h3>Phase 5 — Tool library (weeks 13–16)</h3><span class="tag tg-imp">Important</span></div>
+    <div style="font-size:13px;color:var(--muted);line-height:2.1">
+      □ <ic>nx_agent.tools.web</ic>: search, fetch, scrape<br>
+      □ <ic>nx_agent.tools.code</ic>: execute Python, run shell<br>
+      □ <ic>nx_agent.tools.files</ic>: read, write, parse CSV/JSON/PDF<br>
+      □ <ic>nx_agent.tools.data</ic>: SQL query, DataFrame ops<br>
+      □ Each module is opt-in: <ic>pip install nx-agent[tools-web]</ic>
+    </div>
+  </div>
+  <div class="card al" style="margin-bottom:14px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><h3>Phase 6 — Testing + docs (weeks 17–20)</h3><span class="tag tg-grow">Growth</span></div>
+    <div style="font-size:13px;color:var(--muted);line-height:2.1">
+      □ <ic>MockBackend</ic> with recorded replay<br>
+      □ pytest fixtures: <ic>nx_agent_mock_backend</ic><br>
+      □ Assertion helpers: <ic>assert_tool_called(result, "web_search", times=2)</ic><br>
+      □ 10 example projects in /examples<br>
+      □ API reference auto-generated from docstrings<br>
+      □ Getting started tutorial (15 min to first working agent)
+    </div>
+  </div>
+</div>
+
+<div class="section" id="sec-checklist">
+  <div class="chip chip-p">Section 6</div>
+  <h2>The production checklist</h2>
+  <p class="lead">Every item here separates a toy from a framework developers trust in production.</p>
+  <div class="card" style="margin-bottom:20px">
+    <div style="display:flex;gap:16px;margin-bottom:14px;flex-wrap:wrap">
+      <span style="display:flex;align-items:center;gap:5px;font-size:12px;color:var(--muted)"><span class="cdot dm">M</span> Must have</span>
+      <span style="display:flex;align-items:center;gap:5px;font-size:12px;color:var(--muted)"><span class="cdot dd">D</span> Differentiator</span>
+      <span style="display:flex;align-items:center;gap:5px;font-size:12px;color:var(--muted)"><span class="cdot dw">W</span> Wow factor</span>
+    </div>
+    <p class="sec-label">Correctness</p>
+    <div class="check-item"><span class="cdot dm">M</span><div class="check-text"><strong>Agentic loop has a safety cap.</strong> max_iterations stops infinite loops. Configurable per-agent.</div></div>
+    <div class="check-item"><span class="cdot dm">M</span><div class="check-text"><strong>Tools validated at construction time.</strong> Passing a non-@tool function to Agent raises immediately with a clear message.</div></div>
+    <div class="check-item"><span class="cdot dm">M</span><div class="check-text"><strong>Tool errors captured, not raised.</strong> A tool throwing an exception becomes a ToolCall.error — the agent continues.</div></div>
+    <div class="check-item"><span class="cdot dm">M</span><div class="check-text"><strong>Thread-safe parallel execution.</strong> parallel router uses ThreadPoolExecutor correctly. No shared mutable state.</div></div>
+    <p class="sec-label">Observability</p>
+    <div class="check-item"><span class="cdot dd">D</span><div class="check-text"><strong>Every tool call is recorded</strong> with inputs, outputs, errors, and duration. Zero black boxes.</div></div>
+    <div class="check-item"><span class="cdot dd">D</span><div class="check-text"><strong>WorkflowResult is serializable.</strong> result.to_dict() and result.to_json() work without external libraries.</div></div>
+    <div class="check-item"><span class="cdot dw">W</span><div class="check-text"><strong>OpenTelemetry spans exported automatically.</strong> Drop-in support for Jaeger, Grafana, Datadog — zero config if OTel SDK is installed.</div></div>
+    <div class="check-item"><span class="cdot dw">W</span><div class="check-text"><strong>Token usage and cost tracked per step.</strong> result.steps[0].tokens_used, result.total_cost_usd.</div></div>
+    <p class="sec-label">Developer experience</p>
+    <div class="check-item"><span class="cdot dm">M</span><div class="check-text"><strong>Zero hard dependencies in core.</strong> pip install nx-agent installs nothing else. All LLM libs are optional extras.</div></div>
+    <div class="check-item"><span class="cdot dm">M</span><div class="check-text"><strong>Type hints everywhere.</strong> Every public function has full type annotations. mypy passes with no errors.</div></div>
+    <div class="check-item"><span class="cdot dd">D</span><div class="check-text"><strong>MockBackend for testing.</strong> Agent tests run without internet, without API keys, with deterministic results.</div></div>
+    <div class="check-item"><span class="cdot dd">D</span><div class="check-text"><strong>Swapping LLMs is one line.</strong> Change llm_backend=anthropic_backend() to openai_backend() — nothing else changes.</div></div>
+    <div class="check-item"><span class="cdot dw">W</span><div class="check-text"><strong>Error messages guide, not just inform.</strong> AgentError tells you which agent, what task, what went wrong, and what to try next.</div></div>
+    <p class="sec-label">Things to avoid</p>
+    <div class="check-item"><span class="cdot dx">✗</span><div class="check-text"><strong>Never call layers above you.</strong> A Tool must never call back into Agent. An Agent must never modify Workflow state.</div></div>
+    <div class="check-item"><span class="cdot dx">✗</span><div class="check-text"><strong>Never import LLM libraries at the top level.</strong> Only import inside backend factory functions. Core stays dependency-free.</div></div>
+    <div class="check-item"><span class="cdot dx">✗</span><div class="check-text"><strong>Never silently swallow exceptions.</strong> Every error must be re-raised with context, or recorded in the trace with full details.</div></div>
+    <div class="check-item"><span class="cdot dx">✗</span><div class="check-text"><strong>Never make global state.</strong> No module-level LLM clients, no singleton registries that break test isolation.</div></div>
+  </div>
+</div>
+
+</div>
+
+<script>
+function show(id, btn) {
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
+  document.getElementById('sec-'+id).classList.add('active');
+  btn.classList.add('active');
+  document.querySelector('.main').scrollTop = 0;
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+</script>

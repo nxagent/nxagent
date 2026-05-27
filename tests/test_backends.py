@@ -1,0 +1,133 @@
+"""Tests for optional backend adapters without live provider dependencies."""
+
+import sys
+import types
+
+from nx_agent.backends import grok_backend, huggingface_backend, openai_backend
+
+
+TOOL_SCHEMA = {
+    "name": "lookup",
+    "description": "Look up a value.",
+    "parameters": {"type": "object", "properties": {}},
+}
+
+
+class FakeChatClient:
+    def __init__(self, message):
+        self.message = message
+        self.requests = []
+        self.chat = types.SimpleNamespace(
+            completions=types.SimpleNamespace(create=self.create)
+        )
+
+    def create(self, **kwargs):
+        self.requests.append(kwargs)
+        return types.SimpleNamespace(
+            choices=[types.SimpleNamespace(message=self.message)]
+        )
+
+
+def install_fake_openai(monkeypatch, message):
+    client = FakeChatClient(message)
+    constructed = {}
+
+    def factory(**kwargs):
+        constructed.update(kwargs)
+        return client
+
+    module = types.SimpleNamespace(OpenAI=factory)
+    monkeypatch.setitem(sys.modules, "openai", module)
+    return client, constructed
+
+
+class TestOpenAICompatibleBackends:
+    def test_openai_text_response_and_configuration(self, monkeypatch):
+        message = types.SimpleNamespace(content="hello", tool_calls=None)
+        client, constructed = install_fake_openai(monkeypatch, message)
+        monkeypatch.setenv("OPENAI_API_KEY", "openai-secret")
+
+        backend = openai_backend(model="test-model")
+        output = backend("be helpful", "hello", [])
+
+        assert output == "hello"
+        assert constructed == {"api_key": "openai-secret"}
+        assert client.requests[0]["model"] == "test-model"
+        assert "tools" not in client.requests[0]
+
+    def test_grok_configures_xai_endpoint_and_maps_tool_call(self, monkeypatch):
+        function = types.SimpleNamespace(name="lookup", arguments='{"id": "7"}')
+        message = types.SimpleNamespace(
+            content=None,
+            tool_calls=[types.SimpleNamespace(function=function)],
+        )
+        client, constructed = install_fake_openai(monkeypatch, message)
+        monkeypatch.setenv("XAI_API_KEY", "xai-secret")
+
+        backend = grok_backend()
+        output = backend("system", "find it", [TOOL_SCHEMA])
+
+        assert output == 'TOOL_CALL:lookup:{"id": "7"}'
+        assert constructed == {
+            "api_key": "xai-secret",
+            "base_url": "https://api.x.ai/v1",
+        }
+        request = client.requests[0]
+        assert request["model"] == "grok-4.3"
+        assert request["tools"] == [{"type": "function", "function": TOOL_SCHEMA}]
+        assert request["tool_choice"] == "auto"
+
+
+class TestHuggingFaceBackend:
+    def test_chat_completion_maps_tools_and_output(self, monkeypatch):
+        function = types.SimpleNamespace(name="lookup", arguments={"id": "7"})
+        message = types.SimpleNamespace(
+            content=None,
+            tool_calls=[types.SimpleNamespace(function=function)],
+        )
+        constructed = {}
+
+        class FakeInferenceClient:
+            def __init__(self, **kwargs):
+                constructed.update(kwargs)
+                self.requests = []
+
+            def chat_completion(self, **kwargs):
+                self.requests.append(kwargs)
+                constructed["request"] = kwargs
+                return types.SimpleNamespace(
+                    choices=[types.SimpleNamespace(message=message)]
+                )
+
+        module = types.SimpleNamespace(InferenceClient=FakeInferenceClient)
+        monkeypatch.setitem(sys.modules, "huggingface_hub", module)
+        monkeypatch.setenv("HF_TOKEN", "hf-secret")
+
+        backend = huggingface_backend("provider/model")
+        output = backend("system", "find it", [TOOL_SCHEMA])
+
+        assert output == 'TOOL_CALL:lookup:{"id": "7"}'
+        assert constructed["model"] == "provider/model"
+        assert constructed["token"] == "hf-secret"
+        assert constructed["request"]["tools"] == [
+            {"type": "function", "function": TOOL_SCHEMA}
+        ]
+
+    def test_preserves_max_new_tokens_alias(self, monkeypatch):
+        class FakeInferenceClient:
+            def __init__(self, **kwargs):
+                pass
+
+            def chat_completion(self, **kwargs):
+                assert kwargs["max_tokens"] == 42
+                message = types.SimpleNamespace(content="done", tool_calls=None)
+                return types.SimpleNamespace(
+                    choices=[types.SimpleNamespace(message=message)]
+                )
+
+        module = types.SimpleNamespace(InferenceClient=FakeInferenceClient)
+        monkeypatch.setitem(sys.modules, "huggingface_hub", module)
+
+        backend = huggingface_backend("provider/model", max_new_tokens=42)
+
+        assert backend("system", "hello", []) == "done"

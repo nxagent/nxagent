@@ -1,7 +1,4 @@
-"""
-NxAgent — production-grade agentic framework for orchestrating
-multi-agent workflows, tool execution, and intelligent task routing.
-"""
+"""NxAgent - lightweight agent workflows with tools and pluggable LLMs."""
 
 from nx_agent.tool import tool, ToolSchema
 from nx_agent.agent import Agent

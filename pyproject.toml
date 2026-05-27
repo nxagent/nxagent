@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "nx-agent"
 version = "0.1.0"
-description = "NxAgent — production-grade agentic framework for orchestrating multi-agent workflows, tool execution, and intelligent task routing."
+description = "Lightweight agent workflows with tools, traces, memory, and pluggable LLM backends."
 readme = "README.md"
 license = { text = "MIT" }
 authors = [{ name = "NxAgent Contributors" }]
@@ -25,15 +25,11 @@ dependencies = []   # zero hard deps — all LLM libs are optional
 
 [project.optional-dependencies]
 openai     = ["openai>=1.0"]
+grok       = ["openai>=1.0"]
 anthropic  = ["anthropic>=0.25"]
-huggingface = ["huggingface_hub>=0.22"]
-all        = ["openai>=1.0", "anthropic>=0.25", "huggingface_hub>=0.22"]
+huggingface = ["huggingface_hub>=0.23"]
+all        = ["openai>=1.0", "anthropic>=0.25", "huggingface_hub>=0.23"]
 dev        = ["pytest>=8", "pytest-cov", "ruff", "mypy"]
-
-[project.urls]
-Homepage   = "https://github.com/your-org/nx-agent"
-Repository = "https://github.com/your-org/nx-agent"
-Changelog  = "https://github.com/your-org/nx-agent/blob/main/CHANGELOG.md"
 
 [tool.setuptools.packages.find]
 where = ["."]
