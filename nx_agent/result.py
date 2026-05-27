@@ -42,6 +42,7 @@ class StepResult:
     tool_calls  : Ordered list of tool calls made during the step.
     duration_ms : Wall-clock time of the step in milliseconds.
     metadata    : Arbitrary key-value pairs for extensibility.
+    error       : Fatal agent failure captured by a recovering workflow.
     """
 
     agent_role: str
@@ -50,12 +51,13 @@ class StepResult:
     tool_calls: List[ToolCall] = field(default_factory=list)
     duration_ms: float = 0.0
     metadata: Dict[str, Any] = field(default_factory=dict)
+    error: Optional[str] = None
 
     # ── convenience ──────────────────────────────────────────────────────────
 
     @property
     def succeeded(self) -> bool:
-        return all(tc.error is None for tc in self.tool_calls)
+        return self.error is None and all(tc.error is None for tc in self.tool_calls)
 
     def summary(self) -> str:
         tools_used = ", ".join(tc.name for tc in self.tool_calls) or "none"

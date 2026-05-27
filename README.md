@@ -218,6 +218,24 @@ def my_router(task, agents, history):
 wf = Workflow(agents=[a, b], router=my_router)
 ```
 
+### Partial Results on Failure
+
+Workflows raise `WorkflowError` on fatal agent failures by default. For a
+pipeline that should retain completed work, enable partial results:
+
+```python
+wf = Workflow(agents=[researcher, writer], return_partial=True)
+result = wf.run("Create a brief.")
+
+if not result.succeeded:
+    print(result.output)           # last successful agent output
+    print(result.steps[-1].error)  # captured fatal agent failure
+```
+
+Sequential, LLM-routed, and custom routes stop after the failed step because
+downstream context is incomplete. Parallel routes collect both successful and
+failed agent steps. Every captured failure is serialized in `StepResult.error`.
+
 ---
 
 ## Memory
@@ -266,6 +284,7 @@ step = result.steps[0]
 step.agent_role          # "Research Analyst"
 step.tool_calls          # List[ToolCall]
 step.duration_ms         # float
+step.error               # str | None — captured fatal failure in partial mode
 step.metadata            # {"backend_attempts": [1, ...]}
 step.succeeded           # bool
 step.summary()           # "Research Analyst tools=web_search duration=234ms"
@@ -287,10 +306,11 @@ Included in `0.1.0`:
 - Structured step/tool traces plus JSON result export.
 - Optional OpenAI, Grok, Hugging Face, Ollama, and Anthropic backends with no hard core dependencies.
 - Opt-in backend and tool retries/timeouts with typed backend timeout errors.
+- Opt-in workflow partial results with serialized fatal step failures.
 
-Next milestones from the design guide are partial-result workflow recovery,
-streaming, deeper observability, and reusable testing helpers. They are
-intentionally not presented as shipped features yet.
+Next milestones from the design guide are streaming, deeper observability, and
+reusable testing helpers. They are intentionally not presented as shipped
+features yet.
 
 ## Backend References
 

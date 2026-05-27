@@ -18,6 +18,7 @@ You can also pass a plain Python callable for full custom routing:
 from __future__ import annotations
 
 import concurrent.futures
+import time
 from typing import Callable, List, Optional
 
 from nx_agent.result import StepResult
@@ -60,26 +61,38 @@ class Router:
 
     # ── dispatch ──────────────────────────────────────────────────────────────
 
-    def run(self, task: str, agents: list, history: List[StepResult]) -> List[StepResult]:
+    def run(
+        self,
+        task: str,
+        agents: list,
+        history: List[StepResult],
+        return_partial: bool = False,
+    ) -> List[StepResult]:
         """
         Route *task* through *agents* using the configured strategy.
 
-        Returns a list of StepResult (one per agent that ran).
+        Returns a list of StepResult (one per agent that ran). When
+        *return_partial* is true, a failed agent is recorded as a StepResult
+        instead of propagating its exception.
         """
         if self._strategy == "custom":
-            return self._run_custom(task, agents, history)
+            return self._run_custom(task, agents, history, return_partial)
         if self._strategy == "sequential":
-            return self._run_sequential(task, agents, history)
+            return self._run_sequential(task, agents, history, return_partial)
         if self._strategy == "parallel":
-            return self._run_parallel(task, agents)
+            return self._run_parallel(task, agents, return_partial)
         if self._strategy == "llm":
-            return self._run_llm(task, agents, history)
+            return self._run_llm(task, agents, history, return_partial)
         raise RouterError(f"Unhandled strategy: {self._strategy}")
 
     # ── strategies ────────────────────────────────────────────────────────────
 
     def _run_sequential(
-        self, task: str, agents: list, history: List[StepResult]
+        self,
+        task: str,
+        agents: list,
+        history: List[StepResult],
+        return_partial: bool,
     ) -> List[StepResult]:
         """
         Pass output of each agent as context to the next.
@@ -87,12 +100,16 @@ class Router:
         results: List[StepResult] = []
         context = ""
         for agent in agents:
-            step = agent.run(task=task, context=context)
+            step = self._run_agent(agent, task, context, return_partial)
             results.append(step)
+            if step.error is not None:
+                break
             context = step.output  # chain outputs
         return results
 
-    def _run_parallel(self, task: str, agents: list) -> List[StepResult]:
+    def _run_parallel(
+        self, task: str, agents: list, return_partial: bool
+    ) -> List[StepResult]:
         """
         All agents receive the same task simultaneously.
         Results are ordered by completion time.
@@ -100,7 +117,7 @@ class Router:
         results: List[StepResult] = []
 
         def _run_one(agent):
-            return agent.run(task=task)
+            return self._run_agent(agent, task, "", return_partial)
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=self._max_workers) as ex:
             futures = {ex.submit(_run_one, a): a for a in agents}
@@ -110,7 +127,11 @@ class Router:
         return results
 
     def _run_llm(
-        self, task: str, agents: list, history: List[StepResult]
+        self,
+        task: str,
+        agents: list,
+        history: List[StepResult],
+        return_partial: bool,
     ) -> List[StepResult]:
         """
         Ask an LLM which agent should run next; repeat until done.
@@ -158,15 +179,21 @@ class Router:
                 break
 
             agent = agents[idx]
-            step = agent.run(task=task, context=context)
+            step = self._run_agent(agent, task, context, return_partial)
             results.append(step)
+            if step.error is not None:
+                break
             context = step.output
             used.add(idx)
 
         return results
 
     def _run_custom(
-        self, task: str, agents: list, history: List[StepResult]
+        self,
+        task: str,
+        agents: list,
+        history: List[StepResult],
+        return_partial: bool,
     ) -> List[StepResult]:
         """Delegate to the user-supplied routing function."""
         results: List[StepResult] = []
@@ -175,10 +202,30 @@ class Router:
             next_agent = self._custom_fn(task, agents, results)  # type: ignore[misc]
             if next_agent is None:
                 break
-            step = next_agent.run(task=task, context=context)
+            step = self._run_agent(next_agent, task, context, return_partial)
             results.append(step)
+            if step.error is not None:
+                break
             context = step.output
         return results
+
+    @staticmethod
+    def _run_agent(agent, task: str, context: str, return_partial: bool) -> StepResult:
+        """Execute one agent, optionally retaining fatal failures in the trace."""
+        t_start = time.perf_counter()
+        try:
+            return agent.run(task=task, context=context)
+        except Exception as exc:
+            if not return_partial:
+                raise
+            return StepResult(
+                agent_role=agent.role,
+                input=task,
+                output="",
+                duration_ms=(time.perf_counter() - t_start) * 1000,
+                error=f"{type(exc).__name__}: {exc}",
+                metadata={"exception_type": type(exc).__name__},
+            )
 
     def __repr__(self) -> str:
         return f"Router(strategy={self._strategy!r})"
