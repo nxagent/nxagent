@@ -1,6 +1,5 @@
 """Tests for the @tool decorator and ToolSchema."""
 
-import pytest
 from nx_agent import tool
 from nx_agent.tool import is_tool, get_tool_registry, ToolSchema
 
@@ -20,6 +19,12 @@ def add(x: int, y: int) -> int:
 def greet(name: str, greeting: str = "Hello") -> str:
     """Return a greeting string."""
     return f"{greeting}, {name}!"
+
+
+@tool(retries=2, backoff=0.1, timeout=3)
+def configured_tool(value: str) -> str:
+    """Return a configured value."""
+    return value
 
 
 class TestToolDecorator:
@@ -63,3 +68,8 @@ class TestToolDecorator:
         registry = get_tool_registry()
         assert "add" in registry
         assert "greet" in registry
+
+    def test_resilience_configuration(self):
+        assert configured_tool.config.retry_policy.retries == 2
+        assert configured_tool.config.retry_policy.backoff == 0.1
+        assert configured_tool.config.timeout == 3

@@ -36,9 +36,10 @@ class Workflow:
     name    : Human-readable label for logging / tracing.
     verbose : Print per-step summaries to stdout.
     hooks   : Dict of lifecycle hooks:
-                  "on_step_start"  (agent, task)        → None
-                  "on_step_end"    (agent, StepResult)  → None
+                  "on_workflow_start"(task)              → None
                   "on_workflow_end"(WorkflowResult)      → None
+    return_partial : If true, return completed steps plus a failed StepResult
+              when an agent raises instead of raising WorkflowError.
     """
 
     def __init__(
@@ -48,6 +49,7 @@ class Workflow:
         name: str = "workflow",
         verbose: bool = False,
         hooks: Optional[Dict[str, Callable]] = None,
+        return_partial: bool = False,
     ) -> None:
         if not agents:
             raise WorkflowError("A Workflow must contain at least one Agent.")
@@ -55,6 +57,7 @@ class Workflow:
         self.agents = agents
         self.name = name
         self.verbose = verbose
+        self.return_partial = return_partial
         self.hooks: Dict[str, Callable] = hooks or {}
 
         # Resolve router
@@ -98,13 +101,22 @@ class Workflow:
         self._fire("on_workflow_start", task)
 
         try:
-            steps = self.router.run(task=task, agents=self.agents, history=history)
+            router_options = {"return_partial": True} if self.return_partial else {}
+            steps = self.router.run(
+                task=task,
+                agents=self.agents,
+                history=history,
+                **router_options,
+            )
         except Exception as exc:
             raise WorkflowError(str(exc)) from exc
 
         total_ms = (time.perf_counter() - t_start) * 1000
 
-        final_output = steps[-1].output if steps else ""
+        final_output = next(
+            (step.output for step in reversed(steps) if step.error is None),
+            "",
+        )
 
         result = WorkflowResult(
             output=final_output,
@@ -130,8 +142,7 @@ class Workflow:
         """
         Register a lifecycle hook and return *self* for chaining.
 
-        Events: "on_workflow_start", "on_workflow_end",
-                "on_step_start",     "on_step_end"
+        Events: "on_workflow_start", "on_workflow_end".
         """
         self.hooks[event] = fn
         return self

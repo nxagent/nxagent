@@ -19,9 +19,12 @@ from __future__ import annotations
 import inspect
 import functools
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, List, Optional, get_type_hints
+from typing import Any, Callable, Dict, List, Optional, TypeVar, overload, get_type_hints
+
+from nx_agent.resilience import RetryPolicy
 
 _TOOL_REGISTRY: Dict[str, "ToolSchema"] = {}
+F = TypeVar("F", bound=Callable[..., Any])
 
 
 @dataclass
@@ -73,6 +76,18 @@ class ToolSchema:
         if self.fn is None:
             raise RuntimeError(f"Tool '{self.name}' has no attached function.")
         return self.fn(*args, **kwargs)
+
+
+@dataclass(frozen=True)
+class ToolConfig:
+    """Runtime resilience settings attached to a decorated tool."""
+
+    retry_policy: RetryPolicy = field(default_factory=RetryPolicy)
+    timeout: Optional[float] = None
+
+    def __post_init__(self) -> None:
+        if self.timeout is not None and self.timeout <= 0:
+            raise ValueError("timeout must be > 0")
 
 
 # ── type-to-jsonschema mapping ────────────────────────────────────────────────
@@ -156,33 +171,71 @@ def _build_schema(fn: Callable) -> ToolSchema:
 
 # ── public decorator ──────────────────────────────────────────────────────────
 
-def tool(fn: Callable) -> Callable:
+@overload
+def tool(fn: F) -> F:
+    ...
+
+
+@overload
+def tool(
+    *,
+    retries: int = 0,
+    backoff: float = 0.0,
+    timeout: Optional[float] = None,
+    multiplier: float = 2.0,
+) -> Callable[[F], F]:
+    ...
+
+
+def tool(
+    fn: Optional[F] = None,
+    *,
+    retries: int = 0,
+    backoff: float = 0.0,
+    timeout: Optional[float] = None,
+    multiplier: float = 2.0,
+) -> Any:
     """
     Decorate a plain Python function to make it an NxAgent tool.
 
     The decorated function remains fully callable. A `.schema` (ToolSchema)
     attribute is attached and the tool is added to the global registry.
+    Optional resilience settings are used when an Agent invokes the tool.
 
     Example
     -------
-        @tool
+        @tool(retries=2, backoff=0.1, timeout=10)
         def web_search(query: str) -> str:
             \"\"\"Search the web for current information.\"\"\"
             return requests.get(f"https://api.search.example?q={query}").text
     """
-    schema = _build_schema(fn)
+    config = ToolConfig(
+        retry_policy=RetryPolicy(
+            retries=retries,
+            backoff=backoff,
+            multiplier=multiplier,
+        ),
+        timeout=timeout,
+    )
 
-    @functools.wraps(fn)
-    def wrapper(*args, **kwargs):
-        return fn(*args, **kwargs)
+    def _decorate(inner: F) -> F:
+        schema = _build_schema(inner)
 
-    wrapper.schema = schema  # type: ignore[attr-defined]
-    wrapper.is_nx_tool = True  # type: ignore[attr-defined]
+        @functools.wraps(inner)
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
+            return inner(*args, **kwargs)
 
-    # Register globally so Router / Workflow can discover tools
-    _TOOL_REGISTRY[schema.name] = schema
+        wrapper.schema = schema  # type: ignore[attr-defined]
+        wrapper.config = config  # type: ignore[attr-defined]
+        wrapper.is_nx_tool = True  # type: ignore[attr-defined]
 
-    return wrapper
+        # Register globally so Router / Workflow can discover tools
+        _TOOL_REGISTRY[schema.name] = schema
+        return wrapper  # type: ignore[return-value]
+
+    if fn is None:
+        return _decorate
+    return _decorate(fn)
 
 
 def get_tool_registry() -> Dict[str, ToolSchema]:

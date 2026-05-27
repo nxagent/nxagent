@@ -1,7 +1,9 @@
 """Tests for Workflow and Router."""
 
+import json
+
 import pytest
-from nx_agent import Agent, Workflow, tool
+from nx_agent import Agent, Workflow
 from nx_agent.result import WorkflowResult
 from nx_agent.router import Router
 from nx_agent.exceptions import WorkflowError
@@ -12,6 +14,13 @@ def make_agent(role: str, response: str = None) -> Agent:
 
     def backend(system_prompt, user_message, tools, **kw):
         return resp
+
+    return Agent(role=role, goal=f"Goal of {role}", llm_backend=backend)
+
+
+def make_failing_agent(role: str) -> Agent:
+    def backend(system_prompt, user_message, tools, **kw):
+        raise RuntimeError("provider unavailable")
 
     return Agent(role=role, goal=f"Goal of {role}", llm_backend=backend)
 
@@ -55,6 +64,14 @@ class TestWorkflow:
         result = wf.run("task")
         assert result.output == "[A output]"
 
+    def test_existing_router_override_does_not_require_partial_keyword(self):
+        class ExistingRouter(Router):
+            def run(self, task, agents, history):
+                return [agents[0].run(task)]
+
+        result = Workflow(agents=[make_agent("A")], router=ExistingRouter()).run("task")
+        assert result.output == "[A output]"
+
     def test_parallel_router(self):
         wf = Workflow(
             agents=[make_agent("A"), make_agent("B")],
@@ -87,3 +104,54 @@ class TestWorkflow:
         assert "Task" in pretty
         assert "Output" in pretty
         assert "Step 1" in pretty
+
+    def test_workflow_result_serialization(self):
+        result = Workflow(agents=[make_agent("A")]).run("task", request_id="one")
+
+        as_dict = result.to_dict()
+        as_json = json.loads(result.to_json())
+
+        assert as_dict["steps"][0]["agent_role"] == "A"
+        assert as_json["metadata"]["request_id"] == "one"
+
+    def test_agent_failure_raises_by_default(self):
+        with pytest.raises(WorkflowError, match="provider unavailable"):
+            Workflow(agents=[make_agent("A"), make_failing_agent("B")]).run("task")
+
+    def test_return_partial_records_failure_and_stops_sequential_route(self):
+        unused = []
+
+        def never_run(system_prompt, user_message, tools, **kw):
+            unused.append(True)
+            return "unexpected"
+
+        result = Workflow(
+            agents=[
+                make_agent("A", "useful partial output"),
+                make_failing_agent("B"),
+                Agent(role="C", goal="should not run", llm_backend=never_run),
+            ],
+            return_partial=True,
+        ).run("task")
+
+        assert result.output == "useful partial output"
+        assert result.agents_used == ["A", "B"]
+        assert not result.succeeded
+        assert "BackendError" in result.steps[-1].error
+        assert "provider unavailable" in result.steps[-1].error
+        assert result.steps[-1].metadata["exception_type"] == "BackendError"
+        assert result.to_dict()["steps"][-1]["error"] == result.steps[-1].error
+        assert not unused
+
+    def test_parallel_return_partial_records_failed_agent(self):
+        result = Workflow(
+            agents=[make_agent("A"), make_failing_agent("B")],
+            router="parallel",
+            return_partial=True,
+        ).run("task")
+
+        assert len(result.steps) == 2
+        assert not result.succeeded
+        failed_steps = [step for step in result.steps if step.error is not None]
+        assert len(failed_steps) == 1
+        assert failed_steps[0].agent_role == "B"

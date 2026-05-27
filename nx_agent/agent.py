@@ -8,13 +8,13 @@ It is intentionally backend-agnostic: swap `llm_backend` to use any LLM.
 from __future__ import annotations
 
 import time
-import textwrap
 from typing import Any, Callable, Dict, List, Optional
 
-from nx_agent.tool import ToolSchema, is_tool
+from nx_agent.tool import ToolConfig, is_tool
 from nx_agent.memory import Memory
 from nx_agent.result import StepResult, ToolCall
-from nx_agent.exceptions import AgentError, ToolExecutionError
+from nx_agent.resilience import OperationTimeoutError, RetryExhaustedError, RetryPolicy, execute_with_retry
+from nx_agent.exceptions import AgentError, AgentTimeoutError, BackendError, ToolTimeoutError
 
 
 # ── default LLM backend (stub — replace with real implementation) ────────────
@@ -29,8 +29,7 @@ def _default_llm_backend(
     Stub backend used when no real LLM is configured.
 
     Replace by passing ``llm_backend=your_function`` to the Agent, or by
-    setting the OPENAI_API_KEY / ANTHROPIC_API_KEY environment variable
-    (the built-in backends pick them up automatically via nx_agent.backends).
+    selecting a built-in provider factory from ``nx_agent.backends``.
     """
     tool_names = [t["name"] for t in tools]
     tools_txt = f" Available tools: {tool_names}." if tool_names else ""
@@ -55,9 +54,12 @@ class Agent:
     tools       : List of @tool-decorated callables this agent may invoke.
     llm_backend : Callable(system, user, tools, **kw) → str.
                   Defaults to the stub. Pass nx_agent.backends.openai_backend
-                  or nx_agent.backends.anthropic_backend, or your own.
+                  / grok_backend / huggingface_backend / ollama_backend, or
+                  your own.
     max_iterations : Safety cap on tool-call loops (default 10).
     memory_size : Number of short-term memory entries to keep.
+    retry_policy : Optional retry configuration for backend calls.
+    timeout     : Optional timeout in seconds for each backend call.
     verbose     : Print step traces to stdout.
     kwargs      : Forwarded verbatim to llm_backend on every call.
     """
@@ -70,6 +72,8 @@ class Agent:
         llm_backend: Optional[Callable] = None,
         max_iterations: int = 10,
         memory_size: int = 20,
+        retry_policy: Optional[RetryPolicy] = None,
+        timeout: Optional[float] = None,
         verbose: bool = False,
         **kwargs,
     ) -> None:
@@ -79,6 +83,10 @@ class Agent:
         self._llm_backend = llm_backend or _default_llm_backend
         self.max_iterations = max_iterations
         self.memory = Memory(max_short_entries=memory_size)
+        self.retry_policy = retry_policy or RetryPolicy()
+        if timeout is not None and timeout <= 0:
+            raise ValueError("timeout must be > 0")
+        self.timeout = timeout
         self.verbose = verbose
         self._backend_kwargs = kwargs
 
@@ -108,6 +116,7 @@ class Agent:
         """
         t_start = time.perf_counter()
         tool_calls: List[ToolCall] = []
+        backend_attempts: List[int] = []
 
         system_prompt = self._build_system_prompt()
         user_message = self._build_user_message(task, context)
@@ -124,14 +133,25 @@ class Agent:
             tool_schemas = [t.schema.to_dict() for t in self.tools]
 
             try:
-                raw_output = self._llm_backend(
-                    system_prompt=system_prompt,
-                    user_message=current_message,
-                    tools=tool_schemas,
-                    **self._backend_kwargs,
+                raw_output, attempts = execute_with_retry(
+                    lambda: self._llm_backend(
+                        system_prompt=system_prompt,
+                        user_message=current_message,
+                        tools=tool_schemas,
+                        **self._backend_kwargs,
+                    ),
+                    self.retry_policy,
+                    self.timeout,
                 )
-            except Exception as exc:
-                raise AgentError(self.role, str(exc)) from exc
+            except RetryExhaustedError as exc:
+                if isinstance(exc.last_error, OperationTimeoutError):
+                    raise AgentTimeoutError(
+                        self.role, exc.last_error.timeout, exc.attempts
+                    ) from exc.last_error
+                raise BackendError(
+                    self.role, str(exc.last_error), exc.attempts
+                ) from exc.last_error
+            backend_attempts.append(attempts)
 
             # Check if output contains a tool call directive
             # (Format: TOOL_CALL:<name>:<json_args>)
@@ -176,6 +196,7 @@ class Agent:
             output=final_output,
             tool_calls=tool_calls,
             duration_ms=duration_ms,
+            metadata={"backend_attempts": backend_attempts},
         )
 
     # ── internals ─────────────────────────────────────────────────────────────
@@ -246,11 +267,23 @@ class Agent:
             )
 
         try:
-            output = fn(**tool_args)
+            config = getattr(fn, "config", ToolConfig())
+            output, attempts = execute_with_retry(
+                lambda: fn(**tool_args),
+                config.retry_policy,
+                config.timeout,
+            )
             error = None
-        except Exception as exc:
+            timed_out = False
+        except RetryExhaustedError as exc:
             output = None
-            error = str(exc)
+            attempts = exc.attempts
+            if isinstance(exc.last_error, OperationTimeoutError):
+                error = str(ToolTimeoutError(tool_name, exc.last_error.timeout))
+                timed_out = True
+            else:
+                error = str(exc.last_error)
+                timed_out = False
 
         duration_ms = (time.perf_counter() - t_start) * 1000
         return ToolCall(
@@ -259,6 +292,8 @@ class Agent:
             output=output,
             error=error,
             duration_ms=duration_ms,
+            attempts=attempts,
+            timed_out=timed_out,
         )
 
     # ── dunder ────────────────────────────────────────────────────────────────

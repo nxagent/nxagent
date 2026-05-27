@@ -4,8 +4,8 @@ Result objects returned by Agent.run() and Workflow.run().
 
 from __future__ import annotations
 
-import time
-from dataclasses import dataclass, field
+import json
+from dataclasses import asdict, dataclass, field
 from typing import Any, Dict, List, Optional
 
 
@@ -17,6 +17,12 @@ class ToolCall:
     output: Any
     error: Optional[str] = None
     duration_ms: float = 0.0
+    attempts: int = 1
+    timed_out: bool = False
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Return a JSON-friendly dictionary for logging and traces."""
+        return asdict(self)
 
     def __repr__(self) -> str:
         status = "✓" if self.error is None else "✗"
@@ -36,6 +42,7 @@ class StepResult:
     tool_calls  : Ordered list of tool calls made during the step.
     duration_ms : Wall-clock time of the step in milliseconds.
     metadata    : Arbitrary key-value pairs for extensibility.
+    error       : Fatal agent failure captured by a recovering workflow.
     """
 
     agent_role: str
@@ -44,12 +51,13 @@ class StepResult:
     tool_calls: List[ToolCall] = field(default_factory=list)
     duration_ms: float = 0.0
     metadata: Dict[str, Any] = field(default_factory=dict)
+    error: Optional[str] = None
 
     # ── convenience ──────────────────────────────────────────────────────────
 
     @property
     def succeeded(self) -> bool:
-        return all(tc.error is None for tc in self.tool_calls)
+        return self.error is None and all(tc.error is None for tc in self.tool_calls)
 
     def summary(self) -> str:
         tools_used = ", ".join(tc.name for tc in self.tool_calls) or "none"
@@ -57,6 +65,10 @@ class StepResult:
             f"[{self.agent_role}] tools={tools_used} "
             f"duration={self.duration_ms:.0f}ms succeeded={self.succeeded}"
         )
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Return a JSON-friendly dictionary including nested tool calls."""
+        return asdict(self)
 
     def __repr__(self) -> str:
         return f"StepResult(agent={self.agent_role!r}, tools={len(self.tool_calls)})"
@@ -105,6 +117,14 @@ class WorkflowResult:
         for i, step in enumerate(self.steps, 1):
             lines.append(f"  Step {i} — {step.summary()}")
         return "\n".join(lines)
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Return the complete workflow trace as a dictionary."""
+        return asdict(self)
+
+    def to_json(self, **kwargs: Any) -> str:
+        """Serialize the complete workflow trace as JSON."""
+        return json.dumps(self.to_dict(), default=str, **kwargs)
 
     def __repr__(self) -> str:
         return (
