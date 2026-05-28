@@ -3,12 +3,16 @@
 import sys
 import types
 
+import pytest
+
 from nx_agent.backends import (
+    anthropic_backend,
     grok_backend,
     huggingface_backend,
     ollama_backend,
     openai_backend,
 )
+from nx_agent.exceptions import ProviderRateLimitError
 
 
 TOOL_SCHEMA = {
@@ -19,8 +23,9 @@ TOOL_SCHEMA = {
 
 
 class FakeChatClient:
-    def __init__(self, message):
+    def __init__(self, message, error=None):
         self.message = message
+        self.error = error
         self.requests = []
         self.chat = types.SimpleNamespace(
             completions=types.SimpleNamespace(create=self.create)
@@ -28,13 +33,15 @@ class FakeChatClient:
 
     def create(self, **kwargs):
         self.requests.append(kwargs)
+        if self.error is not None:
+            raise self.error
         return types.SimpleNamespace(
             choices=[types.SimpleNamespace(message=self.message)]
         )
 
 
-def install_fake_openai(monkeypatch, message):
-    client = FakeChatClient(message)
+def install_fake_openai(monkeypatch, message, error=None):
+    client = FakeChatClient(message, error)
     constructed = {}
 
     def factory(**kwargs):
@@ -82,6 +89,39 @@ class TestOpenAICompatibleBackends:
         assert request["tools"] == [{"type": "function", "function": TOOL_SCHEMA}]
         assert request["tool_choice"] == "auto"
 
+    def test_openai_maps_sdk_rate_limit_by_class_name(self, monkeypatch):
+        RateLimitError = type("RateLimitError", (Exception,), {})
+        client, _ = install_fake_openai(
+            monkeypatch,
+            types.SimpleNamespace(content="", tool_calls=None),
+            error=RateLimitError("quota exceeded"),
+        )
+
+        backend = openai_backend(model="test-model", api_key="secret")
+
+        with pytest.raises(ProviderRateLimitError) as exc_info:
+            backend("system", "hello", [])
+
+        assert client.requests[0]["model"] == "test-model"
+        assert exc_info.value.provider == "openai"
+        assert "quota exceeded" in str(exc_info.value)
+
+    def test_grok_maps_compatible_http_429(self, monkeypatch):
+        error = RuntimeError("too many requests")
+        error.status_code = 429
+        install_fake_openai(
+            monkeypatch,
+            types.SimpleNamespace(content="", tool_calls=None),
+            error=error,
+        )
+
+        backend = grok_backend(api_key="secret")
+
+        with pytest.raises(ProviderRateLimitError) as exc_info:
+            backend("system", "hello", [])
+
+        assert exc_info.value.provider == "grok"
+
 
 class TestHuggingFaceBackend:
     def test_chat_completion_maps_tools_and_output(self, monkeypatch):
@@ -118,6 +158,28 @@ class TestHuggingFaceBackend:
             {"type": "function", "function": TOOL_SCHEMA}
         ]
 
+    def test_maps_http_response_rate_limit(self, monkeypatch):
+        constructed = {}
+
+        class FakeInferenceClient:
+            def __init__(self, **kwargs):
+                constructed.update(kwargs)
+
+            def chat_completion(self, **kwargs):
+                error = RuntimeError("provider throttled")
+                error.response = types.SimpleNamespace(status_code=429)
+                raise error
+
+        module = types.SimpleNamespace(InferenceClient=FakeInferenceClient)
+        monkeypatch.setitem(sys.modules, "huggingface_hub", module)
+
+        backend = huggingface_backend("provider/model")
+
+        with pytest.raises(ProviderRateLimitError) as exc_info:
+            backend("system", "hello", [])
+
+        assert exc_info.value.provider == "huggingface"
+
     def test_preserves_max_new_tokens_alias(self, monkeypatch):
         class FakeInferenceClient:
             def __init__(self, **kwargs):
@@ -136,6 +198,28 @@ class TestHuggingFaceBackend:
         backend = huggingface_backend("provider/model", max_new_tokens=42)
 
         assert backend("system", "hello", []) == "done"
+
+
+class TestAnthropicBackend:
+    def test_maps_rate_limit_by_class_name(self, monkeypatch):
+        RateLimitError = type("RateLimitError", (Exception,), {})
+
+        class FakeAnthropicClient:
+            def __init__(self, **kwargs):
+                self.messages = types.SimpleNamespace(create=self.create)
+
+            def create(self, **kwargs):
+                raise RateLimitError("requests exhausted")
+
+        module = types.SimpleNamespace(Anthropic=FakeAnthropicClient)
+        monkeypatch.setitem(sys.modules, "anthropic", module)
+
+        backend = anthropic_backend(api_key="secret")
+
+        with pytest.raises(ProviderRateLimitError) as exc_info:
+            backend("system", "hello", [])
+
+        assert exc_info.value.provider == "anthropic"
 
 
 class TestOllamaBackend:
@@ -188,3 +272,20 @@ class TestOllamaBackend:
 
         assert output == "local answer"
         assert constructed["constructor"] == {}
+
+    def test_maps_ollama_status_code_rate_limit(self, monkeypatch):
+        class FakeOllamaClient:
+            def chat(self, **kwargs):
+                error = RuntimeError("slow down")
+                error.status_code = 429
+                raise error
+
+        module = types.SimpleNamespace(Client=lambda **kwargs: FakeOllamaClient())
+        monkeypatch.setitem(sys.modules, "ollama", module)
+
+        backend = ollama_backend()
+
+        with pytest.raises(ProviderRateLimitError) as exc_info:
+            backend("system", "hello", [])
+
+        assert exc_info.value.provider == "ollama"

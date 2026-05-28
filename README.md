@@ -170,7 +170,7 @@ Retries and timeouts are opt-in, so existing agents retain their original
 single-attempt behavior.
 
 ```python
-from nx_agent import Agent, RetryPolicy, tool
+from nx_agent import Agent, ProviderRateLimitError, RetryPolicy, tool
 from nx_agent.backends import openai_backend
 
 @tool(retries=2, backoff=0.5, timeout=10)
@@ -193,6 +193,23 @@ raise `AgentTimeoutError`. Tool failures remain in `ToolCall.error`, while
 `ToolCall.attempts` and `ToolCall.timed_out` show resilience behavior in the
 trace. A timed-out operation is not retried by default because Python cannot
 forcibly stop provider or tool work that has already started.
+
+Built-in provider adapters normalize recognizable provider rate-limit failures
+to `ProviderRateLimitError`, so applications can retry throttling without
+importing provider SDK exception classes:
+
+```python
+agent = Agent(
+    role="Researcher",
+    goal="Answer accurately",
+    llm_backend=openai_backend(),
+    retry_policy=RetryPolicy(
+        retries=3,
+        backoff=1.0,
+        retry_on=(ProviderRateLimitError,),
+    ),
+)
+```
 
 ---
 

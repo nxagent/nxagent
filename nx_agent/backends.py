@@ -12,10 +12,58 @@ from __future__ import annotations
 
 import json
 import os
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, NoReturn, Optional
+
+from nx_agent.exceptions import ProviderRateLimitError
 
 
 Backend = Callable[..., str]
+_RATE_LIMIT_CLASS_NAMES = {
+    "RateLimitError",
+    "RateLimitExceeded",
+    "TooManyRequests",
+    "TooManyRequestsError",
+}
+
+
+def _status_code(error: Exception) -> Optional[int]:
+    """Return a provider/HTTP status code when one is exposed."""
+    status = getattr(error, "status_code", None)
+    if status is None:
+        response = getattr(error, "response", None)
+        status = getattr(response, "status_code", None)
+    if isinstance(status, int):
+        return status
+    try:
+        return int(status)
+    except (TypeError, ValueError):
+        return None
+
+
+def _is_provider_rate_limit(error: Exception) -> bool:
+    """Classify common provider SDK rate-limit errors without importing SDKs."""
+    if isinstance(error, ProviderRateLimitError):
+        return True
+    if _status_code(error) == 429:
+        return True
+    return error.__class__.__name__ in _RATE_LIMIT_CLASS_NAMES
+
+
+def _normalize_provider_error(provider: str, error: Exception) -> Exception:
+    """Convert provider-specific rate-limit errors into NxAgent's public type."""
+    if isinstance(error, ProviderRateLimitError):
+        return error
+    if _is_provider_rate_limit(error):
+        return ProviderRateLimitError(provider, str(error))
+    return error
+
+
+def _raise_provider_error(provider: str, error: Exception) -> NoReturn:
+    """Raise normalized provider errors while preserving other exceptions."""
+    normalized = _normalize_provider_error(provider, error)
+    if normalized is error:
+        raise error
+    raise normalized from error
 
 
 def _function_tools(tools: List[dict]) -> List[dict]:
@@ -41,6 +89,7 @@ def _chat_completion_backend(
     temperature: float,
     max_tokens: int,
     default_kwargs: Dict[str, Any],
+    provider: str,
 ) -> Backend:
     """Build a backend for clients exposing ``chat.completions.create``."""
 
@@ -68,7 +117,10 @@ def _chat_completion_backend(
             request["tools"] = _function_tools(tools)
             request["tool_choice"] = "auto"
 
-        response = client.chat.completions.create(**request)
+        try:
+            response = client.chat.completions.create(**request)
+        except Exception as exc:
+            _raise_provider_error(provider, exc)
         return _message_output(response.choices[0].message)
 
     return _backend
@@ -93,7 +145,7 @@ def openai_backend(
 
     client = OpenAI(api_key=api_key or os.environ.get("OPENAI_API_KEY"))
     return _chat_completion_backend(
-        client, model, temperature, max_tokens, default_kwargs
+        client, model, temperature, max_tokens, default_kwargs, "openai"
     )
 
 
@@ -120,7 +172,7 @@ def grok_backend(
         base_url=base_url,
     )
     return _chat_completion_backend(
-        client, model, temperature, max_tokens, default_kwargs
+        client, model, temperature, max_tokens, default_kwargs, "grok"
     )
 
 
@@ -165,12 +217,15 @@ def anthropic_backend(
             }
             for tool in tools
         ]
-        response = client.messages.create(
-            system=system_prompt,
-            messages=[{"role": "user", "content": user_message}],
-            tools=anthropic_tools if anthropic_tools else [],
-            **merged,
-        )
+        try:
+            response = client.messages.create(
+                system=system_prompt,
+                messages=[{"role": "user", "content": user_message}],
+                tools=anthropic_tools if anthropic_tools else [],
+                **merged,
+            )
+        except Exception as exc:
+            _raise_provider_error("anthropic", exc)
 
         for block in response.content:
             if block.type == "tool_use":
@@ -226,7 +281,10 @@ def huggingface_backend(
             request["tools"] = _function_tools(tools)
             request["tool_choice"] = "auto"
 
-        response = client.chat_completion(**request)
+        try:
+            response = client.chat_completion(**request)
+        except Exception as exc:
+            _raise_provider_error("huggingface", exc)
         return _message_output(response.choices[0].message)
 
     return _backend
@@ -268,7 +326,10 @@ def ollama_backend(
         if tools:
             request["tools"] = _function_tools(tools)
 
-        response = client.chat(**request)
+        try:
+            response = client.chat(**request)
+        except Exception as exc:
+            _raise_provider_error("ollama", exc)
         return _message_output(response.message)
 
     return _backend

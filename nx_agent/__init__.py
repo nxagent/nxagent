@@ -13,6 +13,7 @@ from nx_agent.exceptions import (
     ToolTimeoutError,
     AgentError,
     BackendError,
+    ProviderRateLimitError,
     AgentTimeoutError,
     WorkflowError,
 )
@@ -33,6 +34,7 @@ __all__ = [
     "ToolTimeoutError",
     "AgentError",
     "BackendError",
+    "ProviderRateLimitError",
     "AgentTimeoutError",
     "WorkflowError",
 ]

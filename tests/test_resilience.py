@@ -5,7 +5,7 @@ import time
 import pytest
 
 from nx_agent import Agent, RetryPolicy, tool
-from nx_agent.exceptions import AgentTimeoutError, BackendError
+from nx_agent.exceptions import AgentTimeoutError, BackendError, ProviderRateLimitError
 
 
 def after_tool_backend(system_prompt, user_message, tools, **kwargs):
@@ -73,6 +73,53 @@ class TestBackendResilience:
             agent.run("wait")
 
         assert calls == ["called"]
+        assert exc_info.value.attempts == 1
+
+    def test_backend_can_retry_only_provider_rate_limits(self):
+        calls = []
+
+        def throttled_backend(system_prompt, user_message, tools, **kwargs):
+            calls.append(user_message)
+            if len(calls) == 1:
+                raise ProviderRateLimitError("openai", "try again later")
+            return "recovered"
+
+        agent = Agent(
+            role="Retry",
+            goal="Recover from throttling",
+            llm_backend=throttled_backend,
+            retry_policy=RetryPolicy(
+                retries=1,
+                retry_on=(ProviderRateLimitError,),
+            ),
+        )
+
+        result = agent.run("try")
+
+        assert result.output == "recovered"
+        assert result.metadata["backend_attempts"] == [2]
+
+    def test_selective_rate_limit_policy_does_not_retry_other_errors(self):
+        calls = []
+
+        def failing_backend(system_prompt, user_message, tools, **kwargs):
+            calls.append(user_message)
+            raise RuntimeError("not throttling")
+
+        agent = Agent(
+            role="Retry",
+            goal="Retry only throttling",
+            llm_backend=failing_backend,
+            retry_policy=RetryPolicy(
+                retries=2,
+                retry_on=(ProviderRateLimitError,),
+            ),
+        )
+
+        with pytest.raises(BackendError) as exc_info:
+            agent.run("try")
+
+        assert calls == ["try"]
         assert exc_info.value.attempts == 1
 
 

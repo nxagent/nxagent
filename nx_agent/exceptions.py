@@ -40,6 +40,14 @@ class BackendError(AgentError):
         )
 
 
+class ProviderRateLimitError(NxAgentError):
+    """Raised by built-in backends when a provider reports a rate limit."""
+
+    def __init__(self, provider: str, message: str):
+        self.provider = provider
+        super().__init__(f"[Provider:{provider}] Rate limited: {message}")
+
+
 class AgentTimeoutError(BackendError):
     """Raised when an agent backend exceeds its configured timeout."""
 
