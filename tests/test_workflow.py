@@ -15,14 +15,14 @@ def make_agent(role: str, response: str = None) -> Agent:
     def backend(system_prompt, user_message, tools, **kw):
         return resp
 
-    return Agent(role=role, goal=f"Goal of {role}", llm_backend=backend)
+    return Agent(role=role, system_prompt=f"Goal of {role}", llm_backend=backend)
 
 
 def make_failing_agent(role: str) -> Agent:
     def backend(system_prompt, user_message, tools, **kw):
         raise RuntimeError("provider unavailable")
 
-    return Agent(role=role, goal=f"Goal of {role}", llm_backend=backend)
+    return Agent(role=role, system_prompt=f"Goal of {role}", llm_backend=backend)
 
 
 class TestWorkflow:
@@ -50,7 +50,7 @@ class TestWorkflow:
             return "B done"
 
         agent_a = make_agent("A", "A result")
-        agent_b = Agent(role="B", goal="chain", llm_backend=backend_b)
+        agent_b = Agent(role="B", system_prompt="chain", llm_backend=backend_b)
 
         Workflow(agents=[agent_a, agent_b]).run("chain test")
         assert "A result" in received_ctx["msg"]
@@ -129,7 +129,7 @@ class TestWorkflow:
             agents=[
                 make_agent("A", "useful partial output"),
                 make_failing_agent("B"),
-                Agent(role="C", goal="should not run", llm_backend=never_run),
+                Agent(role="C", system_prompt="should not run", llm_backend=never_run),
             ],
             return_partial=True,
         ).run("task")

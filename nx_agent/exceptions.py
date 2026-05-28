@@ -61,6 +61,17 @@ class AgentTimeoutError(BackendError):
         )
 
 
+class MaxIterationsExceeded(AgentError):
+    """Raised when an agent does not finish before its tool-loop cap."""
+
+    def __init__(self, agent_role: str, max_iterations: int):
+        self.max_iterations = max_iterations
+        super().__init__(
+            agent_role,
+            f"Exceeded max_iterations={max_iterations} without a final answer.",
+        )
+
+
 class WorkflowError(NxAgentError):
     """Raised when a workflow cannot complete."""
 

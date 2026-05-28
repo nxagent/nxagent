@@ -49,12 +49,25 @@ from nx_agent.backends import openai_backend
 
 agent = Agent(
     role="Researcher",
-    goal="Answer clearly in one paragraph",
+    system_prompt="Answer clearly in one paragraph using plain language.",
     llm_backend=openai_backend(),   # reads OPENAI_API_KEY from env
 )
 
 result = agent.run("What is NxAgent?")
 print(result.output)
+```
+
+`role` is the lightweight persona and trace label. Use `system_prompt` for the
+actual system instructions, style, constraints, and domain context.
+
+```python
+from nx_agent import system_prompt
+
+prompt = system_prompt(
+    goal="Answer clearly",
+    instructions="Use plain language and avoid extra formatting.",
+    output_format="One short paragraph.",
+)
 ```
 
 ### 02 — Attach a Tool with Grok
@@ -70,7 +83,7 @@ def web_search(query: str) -> str:
 
 researcher = Agent(
     role="Research Analyst",
-    goal="Find accurate source material",
+    system_prompt="Find accurate source material",
     tools=[web_search],
     llm_backend=grok_backend(),  # reads XAI_API_KEY from env
 )
@@ -89,14 +102,14 @@ def web_search(query: str) -> str:
 
 researcher = Agent(
     role="Research Analyst",
-    goal="Collect accurate source material",
+    system_prompt="Collect accurate source material",
     tools=[web_search],
     llm_backend=openai_backend(),
 )
 
 writer = Agent(
     role="Technical Writer",
-    goal="Turn findings into a clear brief",
+    system_prompt="Turn findings into a clear brief",
     llm_backend=openai_backend(),
 )
 
@@ -153,7 +166,7 @@ from nx_agent.backends import ollama_backend
 
 agent = Agent(
     role="Local Assistant",
-    goal="Answer without a hosted API",
+    system_prompt="Answer without a hosted API. Keep the response short.",
     llm_backend=ollama_backend(model="qwen3"),
 )
 
@@ -161,6 +174,23 @@ print(agent.run("Summarize this project.").output)
 ```
 
 Pass `host="http://another-host:11434"` to connect to another Ollama server.
+Local latency depends mostly on the model and hardware, not the NxAgent
+workflow layer. For fast smoke tests:
+
+- Use a tiny model such as `tinyllama` or `qwen2.5:0.5b`.
+- Keep prompts and expected outputs short.
+- Remember that a two-agent workflow makes two model calls.
+- Warm the model once with `ollama run <model> "ok"` before timing a test.
+- Pass Ollama generation options through the backend when you need tighter
+  control, for example `ollama_backend(model="tinyllama", options={"num_predict": 32})`.
+
+Keep live Ollama experiments separate from the deterministic package tests.
+The repository's default pytest configuration runs `tests/`; local-only flows
+can live under `tests_local/` and be run explicitly, for example:
+
+```bash
+python3 -m pytest -q -s tests_local/test_ollama_flow.py
+```
 
 ---
 
@@ -170,7 +200,7 @@ Retries and timeouts are opt-in, so existing agents retain their original
 single-attempt behavior.
 
 ```python
-from nx_agent import Agent, ProviderRateLimitError, RetryPolicy, tool
+from nx_agent import Agent, ProviderRateLimitError, RetryPolicy, RunConfig, tool
 from nx_agent.backends import openai_backend
 
 @tool(retries=2, backoff=0.5, timeout=10)
@@ -180,11 +210,16 @@ def fetch_record(record_id: str) -> str:
 
 agent = Agent(
     role="Researcher",
-    goal="Retrieve and explain the record",
+    system_prompt="Retrieve and explain the record",
     tools=[fetch_record],
     llm_backend=openai_backend(),
     retry_policy=RetryPolicy(retries=2, backoff=0.5),
     timeout=30,
+)
+
+result = agent.run(
+    "Fetch and summarize record A-123.",
+    config=RunConfig(temperature=0.1, max_tokens=300),
 )
 ```
 
@@ -201,7 +236,7 @@ importing provider SDK exception classes:
 ```python
 agent = Agent(
     role="Researcher",
-    goal="Answer accurately",
+    system_prompt="Answer accurately",
     llm_backend=openai_backend(),
     retry_policy=RetryPolicy(
         retries=3,
@@ -287,6 +322,14 @@ are reserved for a later tracing release.
 ## Result Object
 
 ```python
+agent_result = agent.run("my task")
+agent_result.output          # str
+agent_result.role            # role label
+agent_result.iterations      # completed model iterations
+agent_result.memory_snapshot # short/long memory after the run
+
+agent_result = await agent.run_async("my async task")
+
 result = workflow.run("my task")
 
 result.output            # str  — final answer

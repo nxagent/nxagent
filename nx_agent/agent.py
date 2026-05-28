@@ -1,20 +1,29 @@
 """
 Agent — the single unit of work in NxAgent.
 
-An Agent has a *role* and a *goal* and can be given a list of tools.
+An Agent has a role label, a system prompt, and optional tools.
 It is intentionally backend-agnostic: swap `llm_backend` to use any LLM.
 """
 
 from __future__ import annotations
 
+import asyncio
 import time
 from typing import Any, Callable, Dict, List, Optional
 
 from nx_agent.tool import ToolConfig, is_tool
 from nx_agent.memory import Memory
-from nx_agent.result import StepResult, ToolCall
+from nx_agent.result import ToolCall
+from nx_agent.prompt import system_prompt as compose_system_prompt
 from nx_agent.resilience import OperationTimeoutError, RetryExhaustedError, RetryPolicy, execute_with_retry
-from nx_agent.exceptions import AgentError, AgentTimeoutError, BackendError, ToolTimeoutError
+from nx_agent.types import AgentResult, RunConfig
+from nx_agent.exceptions import (
+    AgentError,
+    AgentTimeoutError,
+    BackendError,
+    MaxIterationsExceeded,
+    ToolTimeoutError,
+)
 
 
 # ── default LLM backend (stub — replace with real implementation) ────────────
@@ -44,13 +53,14 @@ def _default_llm_backend(
 
 class Agent:
     """
-    A focused worker with a role, goal, optional tools, and memory.
+    A focused worker with a role label, system prompt, tools, and memory.
 
     Parameters
     ----------
-    role        : Short label describing what this agent does
-                  (e.g. "Research Analyst").
-    goal        : The output objective (e.g. "Find accurate source material").
+    role        : Short label describing what this agent does; used in prompts
+                  and traces. Defaults to "Assistant".
+    system_prompt : Optional system instructions. Pass a plain string or use
+                  ``nx_agent.system_prompt(...)`` to compose one.
     tools       : List of @tool-decorated callables this agent may invoke.
     llm_backend : Callable(system, user, tools, **kw) → str.
                   Defaults to the stub. Pass nx_agent.backends.openai_backend
@@ -61,13 +71,12 @@ class Agent:
     retry_policy : Optional retry configuration for backend calls.
     timeout     : Optional timeout in seconds for each backend call.
     verbose     : Print step traces to stdout.
-    kwargs      : Forwarded verbatim to llm_backend on every call.
     """
 
     def __init__(
         self,
-        role: str,
-        goal: str,
+        role: str = "Assistant",
+        system_prompt: Optional[str] = None,
         tools: Optional[List[Callable]] = None,
         llm_backend: Optional[Callable] = None,
         max_iterations: int = 10,
@@ -75,10 +84,9 @@ class Agent:
         retry_policy: Optional[RetryPolicy] = None,
         timeout: Optional[float] = None,
         verbose: bool = False,
-        **kwargs,
     ) -> None:
         self.role = role
-        self.goal = goal
+        self.system_prompt = system_prompt
         self.tools: List[Callable] = tools or []
         self._llm_backend = llm_backend or _default_llm_backend
         self.max_iterations = max_iterations
@@ -88,7 +96,6 @@ class Agent:
             raise ValueError("timeout must be > 0")
         self.timeout = timeout
         self.verbose = verbose
-        self._backend_kwargs = kwargs
 
         # Validate tools
         for t in self.tools:
@@ -101,35 +108,44 @@ class Agent:
 
     # ── public API ────────────────────────────────────────────────────────────
 
-    def run(self, task: str, context: str = "") -> StepResult:
+    def run(
+        self,
+        instruction: str,
+        context: str = "",
+        config: Optional[RunConfig] = None,
+    ) -> AgentResult:
         """
-        Execute the agent on *task*.
+        Execute the agent on *instruction*.
 
         Parameters
         ----------
-        task    : The natural-language task or question.
-        context : Optional upstream context (e.g. previous agent's output).
+        instruction : The natural-language task or question.
+        context     : Optional caller-injected external knowledge.
+        config      : Optional per-run backend settings.
 
         Returns
         -------
-        StepResult with output text and full tool-call trace.
+        AgentResult with output text and full tool-call trace.
         """
         t_start = time.perf_counter()
         tool_calls: List[ToolCall] = []
         backend_attempts: List[int] = []
 
         system_prompt = self._build_system_prompt()
-        user_message = self._build_user_message(task, context)
+        user_message = self._build_user_message(instruction, context)
+        backend_kwargs = config.to_backend_kwargs() if config else {}
 
         if self.verbose:
             print(f"\n{'='*60}")
-            print(f"Agent [{self.role}] ← {task[:100]}")
+            print(f"Agent [{self.role}] ← {instruction[:100]}")
 
         # Agentic loop: call LLM → maybe invoke tools → repeat
         current_message = user_message
         final_output = ""
+        iterations = 0
 
         for iteration in range(self.max_iterations):
+            iterations = iteration + 1
             tool_schemas = [t.schema.to_dict() for t in self.tools]
 
             try:
@@ -138,7 +154,7 @@ class Agent:
                         system_prompt=system_prompt,
                         user_message=current_message,
                         tools=tool_schemas,
-                        **self._backend_kwargs,
+                        **backend_kwargs,
                     ),
                     self.retry_policy,
                     self.timeout,
@@ -174,42 +190,51 @@ class Agent:
             tool_result = tc.output if tc.error is None else f"ERROR: {tc.error}"
             current_message = (
                 f"Tool '{tool_name}' returned:\n{tool_result}\n\n"
-                f"Continue completing the task: {task}"
+                f"Continue completing the instruction: {instruction}"
             )
 
         else:
-            # Hit max_iterations without a final answer
-            final_output = f"[Reached max_iterations={self.max_iterations}] {raw_output}"
+            raise MaxIterationsExceeded(self.role, self.max_iterations)
 
         duration_ms = (time.perf_counter() - t_start) * 1000
 
         # Update short-term memory
-        self.memory.short.add("user", task)
+        self.memory.short.add("user", instruction)
         self.memory.short.add("agent", final_output)
 
         if self.verbose:
             print(f"Agent [{self.role}] → {final_output[:120]}")
 
-        return StepResult(
+        return AgentResult(
             agent_role=self.role,
-            input=task,
+            input=instruction,
             output=final_output,
             tool_calls=tool_calls,
             duration_ms=duration_ms,
             metadata={"backend_attempts": backend_attempts},
+            iterations=iterations,
+            memory_snapshot=self._memory_snapshot(),
         )
+
+    async def run_async(
+        self,
+        instruction: str,
+        context: str = "",
+        config: Optional[RunConfig] = None,
+    ) -> AgentResult:
+        """Async variant of ``run()`` with the same contract."""
+        return await asyncio.to_thread(self.run, instruction, context, config)
 
     # ── internals ─────────────────────────────────────────────────────────────
 
     def _build_system_prompt(self) -> str:
         parts = [
             f"You are a {self.role}.",
-            f"Your goal: {self.goal}",
         ]
 
-        lt_block = self.memory.long.to_prompt_block()
-        if lt_block:
-            parts.append(lt_block)
+        prompt = compose_system_prompt(self.system_prompt)
+        if prompt:
+            parts.append(prompt)
 
         if self.tools:
             tool_names = ", ".join(t.schema.name for t in self.tools)
@@ -222,10 +247,21 @@ class Agent:
 
         return "\n".join(parts)
 
-    def _build_user_message(self, task: str, context: str) -> str:
+    def _build_user_message(self, instruction: str, context: str) -> str:
+        parts = []
+        memory_context = self.memory.build_context()
+        if memory_context:
+            parts.append(memory_context)
         if context:
-            return f"Context from previous step:\n{context}\n\nTask: {task}"
-        return task
+            parts.append(f"## Context\n{context}")
+        parts.append(f"## Instruction\n{instruction}")
+        return "\n\n".join(parts)
+
+    def _memory_snapshot(self) -> Dict[str, Any]:
+        return {
+            "short": self.memory.short.to_prompt_messages(),
+            "long": self.memory.long.all_facts(),
+        }
 
     def _parse_tool_directive(self, text: str):
         """

@@ -140,7 +140,7 @@ class Router:
             raise RouterError("strategy='llm' requires llm_backend to be set on Router.")
 
         agent_descriptions = "\n".join(
-            f"{i}: role={a.role!r}, goal={a.goal!r}"
+            f"{i}: role={a.role!r}, system_prompt={a.system_prompt!r}"
             for i, a in enumerate(agents)
         )
 
@@ -214,7 +214,7 @@ class Router:
         """Execute one agent, optionally retaining fatal failures in the trace."""
         t_start = time.perf_counter()
         try:
-            return agent.run(task=task, context=context)
+            return agent.run(instruction=task, context=context)
         except Exception as exc:
             if not return_partial:
                 raise

@@ -4,6 +4,8 @@ from nx_agent.tool import tool, ToolSchema, ToolConfig
 from nx_agent.agent import Agent
 from nx_agent.workflow import Workflow
 from nx_agent.result import WorkflowResult, StepResult
+from nx_agent.types import AgentResult, RunConfig
+from nx_agent.prompt import system_prompt
 from nx_agent.router import Router
 from nx_agent.memory import Memory
 from nx_agent.resilience import RetryPolicy
@@ -15,6 +17,7 @@ from nx_agent.exceptions import (
     BackendError,
     ProviderRateLimitError,
     AgentTimeoutError,
+    MaxIterationsExceeded,
     WorkflowError,
 )
 
@@ -27,6 +30,9 @@ __all__ = [
     "ToolSchema",
     "ToolConfig",
     "RetryPolicy",
+    "RunConfig",
+    "system_prompt",
+    "AgentResult",
     "WorkflowResult",
     "StepResult",
     "NxAgentError",
@@ -36,6 +42,7 @@ __all__ = [
     "BackendError",
     "ProviderRateLimitError",
     "AgentTimeoutError",
+    "MaxIterationsExceeded",
     "WorkflowError",
 ]
 

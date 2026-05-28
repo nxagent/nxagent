@@ -26,7 +26,7 @@ class TestBackendResilience:
 
         agent = Agent(
             role="Retry",
-            goal="Recover",
+            system_prompt="Recover",
             llm_backend=flaky_backend,
             retry_policy=RetryPolicy(retries=1),
         )
@@ -42,7 +42,7 @@ class TestBackendResilience:
 
         agent = Agent(
             role="Retry",
-            goal="Fail clearly",
+            system_prompt="Fail clearly",
             llm_backend=failing_backend,
             retry_policy=RetryPolicy(retries=2),
         )
@@ -63,7 +63,7 @@ class TestBackendResilience:
 
         agent = Agent(
             role="Slow",
-            goal="Stop waiting",
+            system_prompt="Stop waiting",
             llm_backend=slow_backend,
             retry_policy=RetryPolicy(retries=2),
             timeout=0.001,
@@ -86,7 +86,7 @@ class TestBackendResilience:
 
         agent = Agent(
             role="Retry",
-            goal="Recover from throttling",
+            system_prompt="Recover from throttling",
             llm_backend=throttled_backend,
             retry_policy=RetryPolicy(
                 retries=1,
@@ -108,7 +108,7 @@ class TestBackendResilience:
 
         agent = Agent(
             role="Retry",
-            goal="Retry only throttling",
+            system_prompt="Retry only throttling",
             llm_backend=failing_backend,
             retry_policy=RetryPolicy(
                 retries=2,
@@ -119,7 +119,7 @@ class TestBackendResilience:
         with pytest.raises(BackendError) as exc_info:
             agent.run("try")
 
-        assert calls == ["try"]
+        assert calls == ["## Instruction\ntry"]
         assert exc_info.value.attempts == 1
 
 
@@ -137,7 +137,7 @@ class TestToolResilience:
 
         agent = Agent(
             role="Tools",
-            goal="Use a tool",
+            system_prompt="Use a tool",
             tools=[flaky_lookup],
             llm_backend=after_tool_backend,
         )
@@ -158,7 +158,7 @@ class TestToolResilience:
 
         agent = Agent(
             role="Tools",
-            goal="Use a tool",
+            system_prompt="Use a tool",
             tools=[flaky_lookup],
             llm_backend=after_tool_backend,
         )
